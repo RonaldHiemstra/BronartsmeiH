@@ -1,0 +1,48 @@
+{
+  "python.pythonPath": "${env.HOME}\\.conda\\envs\\mpydev\\python.exe",
+  "python.languageServer": "Pylance",
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": true,
+  "python.analysis.extraPaths": [
+    "./src/lib",
+    "../github/micropython-stubs/stubs/cpython_core",
+    "../github/micropython-stubs/stubs/micropython-1_13-frozen/esp32/GENERIC",
+    "../github/micropython-stubs/stubs/micropython-esp32-1_13-103",
+    "../github/ads1x15",
+    "../picoweb"
+  ],
+  "cSpell.language": "en",
+  "cSpell.words": [
+    "Br",
+    "Brönald",
+    "Helvetica",
+    "Reuz",
+    "WLAN",
+    "aclose",
+    "asyncio",
+    "atten",
+    "awrite",
+    "bronartsmei",
+    "conda",
+    "dietpi",
+    "esptool",
+    "h",
+    "isconnected",
+    "micropython",
+    "mktime",
+    "mpfshell",
+    "mqtt",
+    "nald",
+    "ntptime",
+    "osdebug",
+    "picoweb",
+    "ssid",
+    "stdev",
+    "uasyncio",
+    "ujson",
+    "webrepl"
+  ],
+  "editor.rulers": [
+    132
+  ]
+}
