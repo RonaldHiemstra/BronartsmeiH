@@ -42,6 +42,7 @@
     "ujson",
     "webrepl"
   ],
+  "python.linting.pycodestyleArgs": ["--max-line-length=132"],
   "editor.rulers": [
     132
   ]

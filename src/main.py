@@ -21,7 +21,7 @@ PROJECT_NAME = 'BronatrsmeiH'
 
 MANUAL_CONTROL = 0
 TARGET_TEMPERATURE = 21
-HIST_GOAL = .5 # accept +/- .5 degC
+HIST_GOAL = .5  # accept +/- .5 degC
 
 SYSTEM_CONFIG = Config('SYSTEM_CONFIG.json')
 LOCAL_TIME = Localtime(SYSTEM_CONFIG.get('utc_offset'))
@@ -29,11 +29,18 @@ LOGGER = Logger(LOCAL_TIME)
 
 START_TIME = time.time()
 
+
 def alert(msg):
+    """Alert the operator!
+    Some operator action is required.
+    """
     #TODO: ALERT!!!!!
     logging.warning(msg)
 
+
 class Stage():
+    """A stage in the brewing process."""
+
     def __init__(self, name, duration, temperature, action=None, wait_for_action=True):
         self.name = name
         self.duration = duration
@@ -43,11 +50,12 @@ class Stage():
         self.end_message = action
         self.end = None
 
+
 class Recipe():
     def __init__(self, stages):
         self.stages = stages
         self.index = 0
-        self.edge = None # -1 for raising edge; 1 for falling edge
+        self.edge = None  # -1 for raising edge; 1 for falling edge
 
     def set_current_temperature(self, cur_temperature):
         target_temperature = self.get_target_temperature()
@@ -83,6 +91,7 @@ class Recipe():
         else:
             logging.error('Action "%s" not allowed!, wrong stage[%d] expecting "%s"', action, self.index, stage.end_message)
 
+
 # duration, target temperature, start time (temperature reached)
 recipe = Recipe([Stage('Preheat', 0, 70, 'Add malt and cooked oats'),
                  Stage('Maichen phase1', 60 * 60, 67),
@@ -94,6 +103,7 @@ recipe = Recipe([Stage('Preheat', 0, 70, 'Add malt and cooked oats'),
 
 recipe.index = 1
 recipe.stages[1].duration = 20 * 69
+
 
 class Heater():
     def __init__(self, pin=13):
@@ -113,13 +123,14 @@ class Heater():
             self.print_state()
 
     def print_state(self):
-        msg = 'Heater %s'  % ('ON' if self.state else 'OFF')
+        msg = 'Heater %s' % ('ON' if self.state else 'OFF')
         LOGGER.log(msg)
+
 
 class Calibration():
     def __init__(self, calibration_file, steps, min_temp, max_temp):
         self._config = Config(calibration_file)
-        self._steps = dict() # Update with update_steps()
+        self._steps = dict()  # Update with update_steps()
         cal_values = self._config.get()
         if cal_values:
             raw_values = sorted(cal_values)
@@ -130,7 +141,8 @@ class Calibration():
                     logging.warning('lowest temperature is already specified as %f, given %f is ignored',
                                     cal_values[lowest], min_temp)
             elif cal_values[lowest] > min_temp:
-                self._config.set('t0000', min_temp) # Set a new (initial) minimum for this sensor
+                # Set a new (initial) minimum for this sensor
+                self._config.set('t0000', min_temp)
             else:
                 logging.warning('index: %s is lower (%f) than given minimum %f', lowest, cal_values[lowest], min_temp)
             if highest == 't%04d' % (steps - 1):
@@ -138,7 +150,8 @@ class Calibration():
                     logging.warning('highest temperature is already specified as %f, given %f is ignored',
                                     cal_values[highest], max_temp)
             elif cal_values[highest] < max_temp:
-                self._config.set('t%04d' % (steps - 1), max_temp) # Set a new (initial) maximum for this sensor
+                # Set a new (initial) maximum for this sensor
+                self._config.set('t%04d' % (steps - 1), max_temp)
             else:
                 logging.warning('index: %s is higher (%f) than given maximum %f', highest, cal_values[highest], max_temp)
         else:
@@ -147,7 +160,6 @@ class Calibration():
         self.update_steps()
 
     def update_steps(self):
-#        self._steps = { int(key[1:]): self._config.get(key) for key in sorted(self._config.get()) }
         # make config sorted
         self._steps = OrderedDict([(int(key[1:]), value)
                                    for (key, value) in sorted(self._config.get().items(), key=lambda t: t[0])])
@@ -203,7 +215,7 @@ def best_fit_slope_and_intercept(X, Y):
     # https://stackoverflow.com/questions/22239691/code-for-best-fit-straight-line-of-a-scatter-plot-in-python
     xBar = sum(X)/len(X)
     yBar = sum(Y)/len(Y)
-    n = len(X) # or len(Y)
+    n = len(X)  # or len(Y)
     num = sum([xi*yi for xi, yi in zip(X, Y)]) - n * xBar * yBar
     deNum = sum([xi**2 for xi in X]) - n * xBar**2
     b = num / deNum
@@ -211,20 +223,22 @@ def best_fit_slope_and_intercept(X, Y):
     #print('best fit line:\ny = {:.2f} + {:.2f}x'.format(a, b))
     return b, a
 
+
 class Temperature():
     def __init__(self, pin=32, period=15.0, interval=0.2):
         """Measure the temperature.
         @param period   The duration to measure. [s](The sensor is very noisy :( )
         @param interval Issue a measurement at every interval. [s]
         """
-        self.adc = ADC(Pin(pin))         # create ADC object on ADC pin
-        self.adc.atten(ADC.ATTN_11DB)    # set 11dB input attenuation (voltage range roughly 0.0v - 3.6v)
+        self.adc = ADC(Pin(pin))
+        self.adc.atten(ADC.ATTN_11DB)  # set 11dB input attenuation (voltage range roughly 0.0v - 3.6v)
         self.calibration = Calibration('/data/temp_cal_%d.json' % pin, 4096, -10, 250)
         self.measurements = list()
         self.period = period
         self.interval = interval
         for _ in range(3):
-            self.measurements.append(self.adc.read()) # make sure some values are present to calculate averages
+            # make sure some values are present to calculate averages
+            self.measurements.append(self.adc.read())
         loop = asyncio.get_event_loop()
         loop.create_task(self._collect())
 
@@ -236,7 +250,7 @@ class Temperature():
             if pending:
                 pending -= 1
             else:
-                self.measurements.pop(0) # remove the first measurement
+                self.measurements.pop(0)  # remove the first measurement
 # A new "machine.ADC.read_u16()" method is defined and implemented on stm32, esp8266, esp32 and nrf ports,
 # providing a consistent way to read an ADC that returns a value in the range 0-65535.
 # This new method should be preferred to the existing "ADC.read()" method.
@@ -285,6 +299,7 @@ TEMPERATURE = Temperature()
 TARGET_TEMPERATURE = recipe.stages[0].temperature
 LOGGER.log('target: %d' % (TARGET_TEMPERATURE,))
 
+
 async def temp_control():
     while True:
         temp = TEMPERATURE.get()
@@ -301,7 +316,7 @@ async def temp_control():
                 heater.on()
             elif temp > (target_temperature + HIST_GOAL):
                 heater.off()
-        await asyncio.sleep(1) # Using a solid state relais, it's okay to switch power every sec :)
+        await asyncio.sleep(1)  # Using a solid state relais, it's okay to switch power every sec :)
 
 
 # Complete project details at https://RandomNerdTutorials.com
@@ -351,6 +366,7 @@ Content-Type: text/html
         html += '<hr/><p style="color:red">' + '<br/>\n'.join(log_msg) + '</p>'
     return html
 
+
 def get_html_footer(current_page):
     pagerefs = list()
     log_msg = ''
@@ -369,6 +385,7 @@ def get_html_footer(current_page):
     <p>%s</p>
   </body>
 </html>""" % ' | '.join(pagerefs)
+
 
 def web_page():
     html = '<h2>Recipe</h2>\n'
@@ -412,6 +429,7 @@ def web_page():
         html += '<p><a href="/?recipe.ack_action=%s"><button class="button button_on">action performed</button></a></p>\n' % message
     return html
 
+
 def set_value(obj, key, value, log_msg):
     print('set_value: %s="%s"' % (key, value))
     msg = ''
@@ -440,7 +458,7 @@ def set_value(obj, key, value, log_msg):
             setattr(obj, key, float(value))
         elif hasattr(obj, key) and hasattr(getattr(obj, key), 'set'):
             getattr(obj, key).set(value)
-        elif hasattr(obj, key) and hasattr(getattr(obj, key), value): # call specified method name
+        elif hasattr(obj, key) and hasattr(getattr(obj, key), value):  # call specified method name
             getattr(getattr(obj, key), value)()
         elif callable(getattr(obj, key)):
             getattr(obj, key)(value)
@@ -449,6 +467,7 @@ def set_value(obj, key, value, log_msg):
     if msg:
         logging.error(msg)
         log_msg.append(msg)
+
 
 def index(req, resp):
     # if req.method == "POST": # don't know how to handle post messages...
@@ -462,12 +481,14 @@ def index(req, resp):
     yield from resp.awrite(web_page())
     yield from resp.awrite(get_html_footer('/'))
 
+
 def calibration(req, resp):
     yield from resp.awrite(get_html_header(req, resp, PROJECT_NAME))
     yield from resp.awrite(TEMPERATURE.calibration.web_page())
     yield from resp.awrite('<hr/>\n')
     yield from resp.awrite(TEMPERATURE.get_calibrated_details_page())
     yield from resp.awrite(get_html_footer('/calibration'))
+
 
 def manual(req, resp):
     yield from resp.awrite(get_html_header(req, resp, PROJECT_NAME))
@@ -507,13 +528,13 @@ def manual(req, resp):
     yield from resp.awrite(html)
     yield from resp.awrite(get_html_footer('/manual'))
 
-def hello(req, resp):
-    yield from picoweb.start_response(resp)
-    # Here's how you extract matched groups from a regex URI match
-    yield from resp.awrite("Hello " + req.url_match.group(1))
-
 
 def main():
+    """Main routine.
+
+    * Controll the heater according to the specified recipe.
+    * Run a webserver to show the status of the brewery.
+    """
     routes = [
         ("/", index),
         ('/calibration', calibration),
@@ -534,6 +555,7 @@ def main():
     # 1 (True) debug logging
     # 2 extra debug logging
     app.run(debug=1, host='0.0.0.0', port=80, log=weblog)
+
 
 if __name__ == '__main__':
     main()
