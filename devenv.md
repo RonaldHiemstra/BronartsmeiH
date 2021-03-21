@@ -29,32 +29,50 @@ Download firmware from [MicroPython for ESP32](https://micropython.org/download/
 Install the firmware:
 
 ```bat
+conda activate mpydev
 esptool erase_flash
-esptool --chip esp32 write_flash -z 0x1000 esp32-idf4-20210202-v1.14.bin
+esptool --chip esp32 write_flash -z 0x1000 esp32-idf3-20200902-v1.13.bin
 ```
 
 ### Initial configuration
 
 Open a serial connection to the ESP32 and get started.
 
-``` python
-import network
-sta_if = network.WLAN(network.STA_IF)
-sta_if.active(True)
-sta_if.scan()                             # Scan for available access points
-sta_if.connect("<AP_name>", "<password>") # Connect to an AP
-sta_if.isconnected()                      # Check for successful connection
-```
+1. Configure webrepl and confirm reset when requested:
 
-Enable webrepl
+    ``` python
+    import webrepl_setup
+    ```
 
-``` python
-import webrepl_setup
-```
+1. Connect to your home access point:
+
+    ``` python
+    import network
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    print('\n'.join(['%-32s %d' % (ap[0].decode(), ap[3]) for ap in wlan.scan()]))
+    wlan.connect(input("AP_name:"), input("password:"))
+    ```
+
+1. Check the connection:
+
+    ``` python
+    wlan.isconnected()
+    wlan.ifconfig()
+    ```
+
+1. Start webrepl
+
+    ``` python
+    import webrepl
+    webrepl.start()
+    ```
 
 ### Upload BronartsmeiH project
 
 Run the command script `upload_all.cmd` to upload all required files to the board.
+
+Note: to optimize performance, only changed files are updated. Uploaded files are cached in ./uploaded, to force a complete update: delete the folder ./uploaded
 
 #### Connect to webrepl
 

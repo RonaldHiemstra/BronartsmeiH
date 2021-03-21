@@ -15,6 +15,19 @@ if not exist webrepl_cfg.py (
   popd
 )
 
+if not exist "%~dp0src\system_config.json" (
+  echo Creating a default "%~dp0src\system_config.json".
+  echo Please specify the following required information:
+  set /P ssid=network ssid:
+  set /P password=network password:
+  set /P project_name=project name:
+  set /P utc_offset=UTC offset:
+)
+rem environment variables are late evaluated...
+if not exist "%~dp0src\system_config.json" (
+  echo {"ssid": "%ssid%", "utc_offset": %utc_offset%, "__password": "%password%", "project_name": "%project_name%"}>"%~dp0src\system_config.json"
+)
+
 for /F "delims=', tokens=2" %%p in (webrepl_cfg.py) do call :UPLOAD_FILES %%p
 if errorlevel 1 (
   echo Oeps... something went wrong
@@ -24,8 +37,9 @@ if errorlevel 1 (
   echo PASS = '^<repl_password^>'
   pause
 ) else (
-  echo Reboot the device to activate the changes!
-  echo Ctrl-c -^> Ctrl-d in the micropython shell
+  echo [92mReboot the device to activate the changes![0m
+  echo [93mimport machine; machine.reset^(^)[0m
+  echo [92mor Ctrl-d in the micropython shell.[0m
 )
 exit /b
 
@@ -51,11 +65,15 @@ rem WORKAROUND: webrepl_cli.py does not support : in source and target...
 rem Convert the absolute filepath including drive-letter to a absolute filepath without drive-letter
 set _LOCAL_FILE=%~2
 set _LOCAL_FILE=%_LOCAL_FILE:~2%
-echo %cd%^>python "%~dp0../github/webrepl/webrepl_cli.py" -p ^<password^> "%_LOCAL_FILE%" %BRONARTSMEIH_IP%:%3/%~nx2
+echo [92m%cd%^>python "%~dp0../github/webrepl/webrepl_cli.py" -p ^<password^> "%_LOCAL_FILE%" %BRONARTSMEIH_IP%:%3/%~nx2[0m
 @python "%~dp0../github/webrepl/webrepl_cli.py" -p %1 "%_LOCAL_FILE%" %BRONARTSMEIH_IP%:%3/%~nx2 >nul
 if errorlevel 1 (
-  echo Oeps... something went wrong
-  if not "%3"=="" echo If %3 is not a folder, please create the folder on the device uos.mkdir^('%3'^) and try again
+  echo [91mOeps... something went wrong[0m
+  if not "%3"=="" (
+    echo [92mIf the folder %3 does not exist on the device, please create it[0m
+    echo [93m^>^>^> uos.mkdir^('%3'^)[0m
+    echo [92mand try again...[0m
+  )
   pause
 ) else (
   xcopy /y "%2" "%~dp0\uploaded\%BRONARTSMEIH_IP%\%3\" >nul

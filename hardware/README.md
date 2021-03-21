@@ -74,7 +74,6 @@ screen /dev/ttyUSB0 115200,sc8
 
 To exit a screen session: Press ctrl-A,k
 
-
 ## Check this
 
 Bunch of interesting links: <http://awesome-micropython.com/>
