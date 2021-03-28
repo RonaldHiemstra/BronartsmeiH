@@ -1,7 +1,7 @@
 @echo off
 if not "%1"=="" set BRONARTSMEIH_IP=%1
 if not defined BRONARTSMEIH_IP (
-  echo Specify BronartsmeiH IP-address as argument to this script, or define env:BRONARTSMEIH_IP
+  echo Specify brewery IP-address as argument to this script, or define env:BRONARTSMEIH_IP
   pause
   exit /b 1
 )
@@ -50,6 +50,7 @@ pushd src
 for /R %%f in (*.py) do call :UPLOAD_FILE %1 "%%f"
 popd
 for /R %%f in (..\picoweb\picoweb\*.py) do call :UPLOAD_FILE %1 "%%f" picoweb
+for /R %%f in (..\github\ads1x15\*.py) do call :UPLOAD_FILE %1 "%%f"
 exit /b 0
 
 :UPLOAD_FILE

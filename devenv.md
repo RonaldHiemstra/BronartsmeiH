@@ -8,6 +8,7 @@ This workspace is inspired by "[Josverl/micropython-stubber](https://github.com/
 * Clone <https://github.com/robert-hh/ads1x15.git> in ../github/ads1x15
 * Clone <https://github.com/RonaldHiemstra/picoweb/releases/tag/Br%C3%B6nald%233> in ../picoweb
 * Clone <https://github.com/micropython/webrepl> in ../github/webrepl
+* Clone <https://github.com/robert-hh/ads1x15.git> in ../github/ads1x15
 
 ## Prepare a micropython development environment
 

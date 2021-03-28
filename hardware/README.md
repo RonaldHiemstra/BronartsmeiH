@@ -2,15 +2,22 @@
 
 ## Hardware
 
+### ESP32 devkitC V4
+
+[Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/hw-reference/modules-and-boards.html#esp32-devkitc-v4)
+
+![functional overview](./images/esp32-devkitc-functional-overview.jpg)
+
 ### Hothap Grill thermometer
 
 [Hothap Grill thermometer spare sensor 6.5 inch, BBQ roasting thermometer grill thermometer probe waterproof](https://www.amazon.nl/dp/B0865L3K7N/ref=pe_19967891_404437601_TE_item?language=en_GB)
 
-1. High-quality food grade stainless steel probe compatible with the digital meat thermometer Maveric BB-22.
-2. This kitchen food thermometer is designed for high temperatures and can withstand temperatures up to 380 °C.
-3. Cooking thermometer probe length: 166 mm (6 1/2 inches), hybrid probe: monitor meat or ambient temperature (smoker / grill). Cable length of the digital thermometer probe cable: 40 inch stainless steel grid cable.
-4. Waterproof thermometer hybrid probe replacement for family EAAGD.
-5. 6.5 inch thermopro replacement probe made of food grade stainless steel temperature probe, also for Thermopro Eagd.
+1. High-quality food grade stainless steel probe.
+1. This kitchen food thermometer is designed for high temperatures and can withstand temperatures up to 380 °C.
+1. Cooking thermometer probe length: 166 mm (6 1/2 inches), hybrid probe: monitor meat or ambient temperature (smoker / grill).
+1. Cable length of the digital thermometer probe cable: 40 inch stainless steel grid cable.
+1. Waterproof thermometer hybrid probe.
+1. 6.5 inch probe made of food grade stainless steel temperature probe.
 
 ![Hothap Grill thermometer](./images/518WUiv-04L._AC_SL1024_.jpg)
 
@@ -22,39 +29,13 @@ Resistance per temperature:
 | 105 | 24 |
 | 255 | 6 |
 
-### ESP32 devkitC V4
-
-[Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/hw-reference/modules-and-boards.html#esp32-devkitc-v4)
-
-![functional overview](./images/esp32-devkitc-functional-overview.jpg)
+Add a resistor of 22k in series to have a nice (quite linear) voltage divider.
 
 #### ADC (analog to digital conversion)
 
-On the ESP32 ADC functionality is available on Pins 32-39. Note that, when using the default configuration, input voltages on the ADC pin must be between 0.0v and 1.0v (anything above 1.0v will just read as 4095). Attenuation must be applied in order to increase this usable voltage range.
+The onboard ADC is not very accurate. Therefore the ADS1115 will be used from now on.
 
-Use the machine.ADC class:
-
-``` python
-from machine import ADC
-
-adc = ADC(Pin(32))          # create ADC object on ADC pin
-adc.read()                  # read value, 0-4095 across voltage range 0.0v - 1.0v
-
-adc.atten(ADC.ATTN_11DB)    # set 11dB input attenuation (voltage range roughly 0.0v - 3.6v)
-adc.width(ADC.WIDTH_9BIT)   # set 9 bit return values (returned range 0-511)
-adc.read()                  # read value using the newly configured attenuation and width
-```
-
-ESP32 specific ADC class method reference:
-
-`ADC.atten(attenuation)`
-
-This method allows for the setting of the amount of attenuation on the input of the ADC. This allows for a wider possible input voltage range, at the cost of accuracy (the same number of bits now represents a wider range). The possible attenuation options are:
-
-* ADC.ATTN_0DB: 0dB attenuation, gives a maximum input voltage of 1.00v - this is the default configuration
-* ADC.ATTN_2_5DB: 2.5dB attenuation, gives a maximum input voltage of approximately 1.34v
-* ADC.ATTN_6DB: 6dB attenuation, gives a maximum input voltage of approximately 2.00v
-* ADC.ATTN_11DB: 11dB attenuation, gives a maximum input voltage of approximately 3.6v
+Cheap ADS1115 can be ordered on [AliExpress](https://nl.aliexpress.com/wholesale?SearchText=ads1115)
 
 ### RaspberryPi running DietPi
 

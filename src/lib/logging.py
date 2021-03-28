@@ -98,11 +98,15 @@ _level = INFO
 _loggers = {}
 
 def getLogger(name="root"):
+    """Return a logger with the specified name, creating it if necessary.
+
+    If no name is specified, return the root logger.
+    """
     if name in _loggers:
         return _loggers[name]
-    l = Logger(name)
-    _loggers[name] = l
-    return l
+    logger = Logger(name)
+    _loggers[name] = logger
+    return logger
 
 def error(msg, *args):
     getLogger().error(msg, *args)

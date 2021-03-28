@@ -1,5 +1,5 @@
 [MASTER]
-init-hook='import sys; sys.path[1:1] = ["src/lib", "../github/micropython-stubs/stubs/cpython_core", "../github/micropython-stubs/stubs/micropython-1_13-frozen/esp32/GENERIC", "../github/micropython-stubs/stubs/micropython-esp32-1_13-103", "../picoweb", "./src/lib"];'
+init-hook='import sys; sys.path[1:1] = ["src/lib", "../github/micropython-stubs/stubs/cpython_core", "../github/micropython-stubs/stubs/micropython-1_13-frozen/esp32/GENERIC", "../github/micropython-stubs/stubs/micropython-esp32-1_13-103", "../picoweb", "../github/ads1x15", "./src/lib"];'
 
 [MESSAGES CONTROL]
 # Only show warnings with the listed confidence levels. Leave empty to show
