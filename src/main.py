@@ -12,6 +12,7 @@ import picoweb
 
 from config import Config
 from localtime import Localtime
+from recipe import Recipe, Stage
 from status import state
 from temperature import TemperatureADS1115 as Temperature
 
@@ -19,76 +20,14 @@ logging.basicConfig(level=logging.INFO)
 
 PROJECT_NAME = 'BronatrsmeiH'
 
+START_TIME = time.time()
+
 MANUAL_CONTROL = 0
 TARGET_TEMPERATURE = 21
 HIST_GOAL = .05  # accept +/- .05 degC
 
 SYSTEM_CONFIG = Config('SYSTEM_CONFIG.json')
 LOCAL_TIME = Localtime(SYSTEM_CONFIG.get('utc_offset'))
-
-START_TIME = time.time()
-
-
-def alert(msg):
-    """Alert the operator!
-    Some operator action is required.
-    """
-    # TODO: ALERT!!!!!
-    logging.warning(msg)
-
-
-class Stage():
-    """A stage in the brewing process."""
-
-    def __init__(self, name, duration, temperature, action=None, wait_for_action=True):
-        self.name = name
-        self.duration = duration
-        self.temperature = temperature
-        self.start = None
-        self.wait_for_action = wait_for_action if action else False
-        self.end_message = action
-        self.end = None
-
-
-class Recipe():
-    def __init__(self, stages):
-        self.stages = stages
-        self.index = 0
-        self.edge = None  # -1 for raising edge; 1 for falling edge
-
-    def set_current_temperature(self, cur_temperature):
-        target_temperature = self.get_target_temperature()
-        stage = self.stages[self.index]
-        if stage.start is None:
-            if self.edge is None:
-                self.edge = -1 if cur_temperature < target_temperature else 1
-            delta = target_temperature - cur_temperature
-            if delta * self.edge >= 0:
-                logging.info('start stage %d: target=%.1f, current=%.1f, edge=%d',
-                             self.index, target_temperature, cur_temperature, self.edge)
-                stage.start = time.time()
-                self.edge = None
-
-    def get_target_temperature(self, default=-273):
-        stage = self.stages[self.index]
-        if (stage.start is not None) and (time.time() - stage.start) > stage.duration:
-            if stage.wait_for_action and stage.end is None:
-                alert(stage.end_message)
-            else:
-                if stage.end is None:
-                    stage.end = time.time()
-                if self.index == (len(self.stages) - 1):
-                    return default
-                self.index += 1
-
-        return self.stages[self.index].temperature
-
-    def ack_action(self, action):
-        stage = self.stages[self.index]
-        if stage.end_message == action:
-            stage.end = time.time()
-        else:
-            logging.error('Action "%s" not allowed!, wrong stage[%d] expecting "%s"', action, self.index, stage.end_message)
 
 
 # duration, target temperature, start time (temperature reached)
@@ -100,22 +39,22 @@ recipe = Recipe([Stage('Preheat', 0, 70, 'Add malt and cooked oats'),
                  Stage('Boil phase3', 10 * 60, 100, 'Whirlpool and start cooling'),
                  Stage('Cooling', 0, 20, 'Transfer wort to fermentation vessel and add yeast', False)])
 
-recipe.index = 1
-recipe.stages[1].duration = 20 * 69
-
 
 class Heater():
+    """Control the heater of the kettle."""
     def __init__(self, pin=13):
         self.pin = Pin(pin, Pin.OUT)
         self.state = None
 
-    def on(self):
+    def turn_on(self):
+        """Turn the heater on."""
         if self.state is not 1:
             self.state = 1
             self.pin.value(self.state)
             state.set_info('Heater', 'ON')
 
-    def off(self):
+    def turn_off(self):
+        """Turn the heater off."""
         if self.state is not 0:
             self.state = 0
             self.pin.value(self.state)
@@ -128,7 +67,9 @@ TEMPERATURE = Temperature()
 TARGET_TEMPERATURE = recipe.stages[0].temperature
 state.set_info('Target temperature', TARGET_TEMPERATURE)
 
+
 class Kettle():
+    """Control the brewing kettle."""
     def __init__(self, temperature, heater, recipe, interval=1):
         """Constructor.
         @param period   The duration to measure. [s]
@@ -149,18 +90,19 @@ class Kettle():
             temperature = self.temperature.get()
             await push_event(temperature=temperature)
 
-            self.recipe.set_current_temperature(temperature)
             # DEBUG: using full automation...
             if self.manual_control:
                 target_temperature = self.manual_target_temperature
             else:
-                target_temperature = recipe.get_target_temperature()
+                target_temperature = recipe.get_target_temperature(temperature)
 
             if target_temperature is not None:
                 if temperature < (target_temperature - temperature.histeresis):
-                    self.heater.on()
+                    await push_event(heater_state='ON')
+                    self.heater.turn_on()
                 elif temperature > (target_temperature + temperature.histeresis):
-                    self.heater.off()
+                    await push_event(heater_state='OFF')
+                    self.heater.turn_off()
             await asyncio.sleep(1)
 
 
@@ -171,22 +113,21 @@ async def temp_control():
         temp = TEMPERATURE.get()
         await push_event(temperature=temp)
 
-        recipe.set_current_temperature(temp)
         # DEBUG: using full automation...
         if MANUAL_CONTROL:
             target_temperature = TARGET_TEMPERATURE
         else:
-            target_temperature = recipe.get_target_temperature()
+            target_temperature = recipe.get_target_temperature(temp)
 
         if target_temperature is not None:
             if temp < (target_temperature - HIST_GOAL):
                 if not heater.state:
                     await push_event(heater_state='ON')
-                    heater.on()
+                    heater.turn_on()
             elif temp > (target_temperature + HIST_GOAL):
                 if heater.state:
                     await push_event(heater_state='OFF')
-                    heater.off()
+                    heater.turn_off()
         await asyncio.sleep(1)
 
 
@@ -247,11 +188,11 @@ Content-Type: text/html
     log_msg = list()
     req.parse_qs()
     if logging._level <= logging.DEBUG:
-        for d in dir(req):
-            if not d.startswith('_'):
-                m = getattr(req, d)
-                if not callable(m):
-                    logging.debug('req.%s: %s', d, m)
+        for attr in dir(req):
+            if not attr.startswith('_'):
+                member = getattr(req, attr)
+                if not callable(member):
+                    logging.debug('req.%s: %s', attr, member)
     for key, value in req.form.items():
         set_value(globals(), key, value, log_msg)
     if log_msg:
@@ -260,6 +201,7 @@ Content-Type: text/html
 
 
 def get_html_footer(current_page):
+    """Get HTML generic footer of body containing the navigation to the different pages."""
     pagerefs = list()
     log_msg = ''
     if current_page != '/':
@@ -270,6 +212,7 @@ def get_html_footer(current_page):
         pagerefs.append('<a href="/calibration">Temperature calibration</a>')
     if len(pagerefs) == 2:
         pagerefs.append('<a href="%s">Refresh</a>' % current_page)
+        pagerefs.append('<small>uptime: %d</small>' % (time.time() - START_TIME))
     else:
         log_msg = '<hr/><p style="color:red">current_page "%s" is not (yet) supported...</p>\n' % current_page
     return log_msg + """\
@@ -280,16 +223,17 @@ def get_html_footer(current_page):
 
 
 async def sse_response(resp, events):
+    """Send a server send event response."""
     print("Event source %r connected" % resp)
-    yield from resp.awrite("HTTP/1.0 200 OK\r\n")
-    yield from resp.awrite("Content-Type: text/event-stream\r\n")
-    yield from resp.awrite("\r\n")
+    await picoweb.start_response(resp, content_type='text/event-stream')
     events.add(resp)
     return False
 
 event_sinks = set()
 
-def sse_events(req, resp):
+
+async def sse_events(_req, resp):
+    """Handle a server send event for EventSource("sse_events")."""
     await sse_response(resp, event_sinks)
     return False
 
@@ -301,8 +245,8 @@ async def _push_data(sinks, data):
     for resp in sinks:
         try:
             await resp.awrite("data: %s\n\n" % data)
-        except OSError as e:
-            print("Event source %r disconnected (%r)" % (resp, e))
+        except OSError as ex:
+            print("Event source %r disconnected (%r)" % (resp, ex))
             await resp.aclose()
             # Can't remove item from set while iterating, have to have
             # second pass for that (not very efficient).
@@ -319,50 +263,8 @@ async def push_event(**event):
     await _push_data(event_sinks, json.dumps(event))
 
 
-def web_page():
-    html = '<h2>Recipe</h2>\n'
-    html += '<p>Start: %04d-%02d-%02d %02d:%02d</p>\n' % time.localtime(START_TIME)[:5]
-    html += '<p><table>\n'
-    html += '<tr><th>duration<br/>[min]</th><th>temperature<br/>[&deg;C]</th><th>start</th><th>end</th><th>progress<br/>[%]</th>'
-    html += '<th style="text-align:left">action</th></tr>\n'
-    message = None
-    for stage in recipe.stages:
-        action = stage.end_message if stage.end_message else ''
-        if stage.start is None:
-            row_style = ''
-            t_start = '-'
-            t_end = '-'
-            p = 0
-        elif stage.end is None:
-            row_style = ' style="background-color:yellow"'
-            t_start = '%02d:%02d' % time.localtime(stage.start)[3:5]
-            t_end = '%02d:%02d' % time.localtime(stage.start + stage.duration)[3:5]
-            progress = time.time() - stage.start
-            if progress >= stage.duration:
-                p = 100
-            else:
-                print(time.time(), stage.start, progress, stage.duration)
-                p = 100 * progress / stage.duration
-            if p == 100:
-                message = stage.end_message
-                t_end = '<b>%s</b>' % t_end
-                if action:
-                    action = '<a href="/?recipe.ack_action=%s">%s</a>' % (action, action)
-        else:
-            row_style = ' style="background-color:gray"'
-            t_start = '%02d:%02d' % time.localtime(stage.start)[3:5]
-            t_end = '%02d:%02d' % time.localtime(stage.end)[3:5]
-            p = 100
-        html += '''<tr%s><td>%d</td><td>%d</td><td>%s</td><td>%s</td><td>%.1f</td><td style="text-align:left">%s</td></tr>
-''' % (row_style, stage.duration // 60, stage.temperature, t_start, t_end, p, action)
-    html += '</table></p>\n'
-    if message is not None:
-        html += '<p style="color:red"><b>%s</b></p>\n' % message
-        html += '<p><a href="/?recipe.ack_action=%s"><button class="button button_on">action performed</button></a></p>\n' % message
-    return html
-
-
 def set_value(obj, key, value, log_msg):
+    """write the given value to the member defined by key."""
     print('set_value: %s="%s"' % (key, value))
     msg = ''
     if '.' in key:
@@ -402,6 +304,7 @@ def set_value(obj, key, value, log_msg):
 
 
 def index(req, resp):
+    """Main web page."""
     # if req.method == "POST": # don't know how to handle post messages...
     #     yield from picoweb.http_error(resp, "405")
     yield from resp.awrite(get_html_header(req, resp, PROJECT_NAME))
@@ -410,11 +313,12 @@ def index(req, resp):
 <h2 style="color:red">Manual mode is enabled</h2>
 <p><a href="/?MANUAL_CONTROL=0"><button class="button button_on">Disable manual mode</button></a></p>
 ''')
-    yield from resp.awrite(web_page())
+    yield from resp.awrite(recipe.web_page('recipe'))
     yield from resp.awrite(get_html_footer('/'))
 
 
 def calibration(req, resp):
+    """Temperature calibration web page."""
     yield from resp.awrite(get_html_header(req, resp, PROJECT_NAME))
     yield from resp.awrite(TEMPERATURE.calibration.web_page('TEMPERATURE'))
     yield from resp.awrite('<hr/>\n')
@@ -423,6 +327,7 @@ def calibration(req, resp):
 
 
 def manual(req, resp):
+    """Manual control web page."""
     yield from resp.awrite(get_html_header(req, resp, PROJECT_NAME))
     if not MANUAL_CONTROL:
         yield from resp.awrite('''\
@@ -451,11 +356,11 @@ def manual(req, resp):
 
     if heater.state:
         html += '''\
-<p><a href="/manual?heater=off&TARGET_TEMPERATURE="><button class="button button_off">turn kettle OFF</button></a></p>
+<p><a href="/manual?heater=turn_off&TARGET_TEMPERATURE="><button class="button button_off">turn kettle OFF</button></a></p>
 '''
     else:
         html += '''\
-<p><a href="/manual?heater=on&TARGET_TEMPERATURE="><button class="button button_on">turn kettle ON</button></a></p>
+<p><a href="/manual?heater=turn_on&TARGET_TEMPERATURE="><button class="button button_on">turn kettle ON</button></a></p>
 '''
     yield from resp.awrite(html)
     yield from resp.awrite(get_html_footer('/manual'))

@@ -138,7 +138,7 @@ class TemperatureADS1115(TemperatureBase):
     # This ADC is quite accurate, so it should be possible to control within .1 deg C (+/- 0.05)
     histeresis: float = 0.05
 
-    def __init__(self, scl_pin=22, sda_pin=21, period=3.0, interval=0.2):
+    def __init__(self, scl_pin=22, sda_pin=21, period=1.0, interval=0.2):
         """Constructor.
         @param period   The duration to measure. [s](The sensor is very noisy :( )
         @param interval Issue a measurement at every interval. [s]

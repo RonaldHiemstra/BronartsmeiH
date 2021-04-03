@@ -7,7 +7,7 @@ import time
 from machine import Pin
 # TODO: implement actual control of the LEDs.
 # TODO: add asyncio support, so the call to update() is no longer needed.
-# TODO: also send the info messages (with color info) to the webpage info bar.
+# TODO: also send the info (and alert) messages (with color info) to the webpage info bar.
 # Note: update() is likely still needed in the boot process...
 class _Status:
     STARTING = 0
@@ -29,6 +29,7 @@ class _Status:
         self._leds = [0 for _ in range(self._NR_OF_PHASES)]
         self._prev = self._leds.copy()
         self._blink_on = True
+        self._alert = dict()
         self.info = dict()
         self.last_info_key = None
         self.set_state(self.STARTING, self.RED | self.BLINK, 'Booting')
@@ -70,7 +71,7 @@ class _Status:
         @param message  The message to store.
         """
         self.info[key] = message
-        if self.last_info_key != key:
+        if self.last_info_key and self.last_info_key != key:
             print('')
             self.last_info_key = key
         print('%s: %s' % (key, message), end='\r')
@@ -78,6 +79,24 @@ class _Status:
     def get_info(self):
         """Get all informational messages."""
         return self.info.copy()
+
+    def alert(self, key: str, message:str) -> None:
+        """Store and allert a message.
+
+        @param key      Message source.
+        @param message  The message to store. If None, the alert is served.
+        """
+        if message is None:
+            del self._alert[key]
+            return
+        if self._alert.get(key) == message:
+            return
+        self._alert[key] = message
+        if self.last_info_key:
+            self.last_info_key = None
+            print('')
+        print('!' * 40)
+        print('ALERT! %s: %s' % (key, message))
 
 class TestStatus(_Status):
     """Test status, using single color LEDS, connected to the EPS digital output."""
