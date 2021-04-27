@@ -1,6 +1,6 @@
 """Script to automate the brewing process for the brewery.
 
-Script includes a hardcoded brewing schedule for Brönald #3 - Lockdown.
+Script includes a hardcoded brewing schedule for Brönald #4 - Vier De Bier.
 """
 import json
 import logging
@@ -20,8 +20,6 @@ logging.basicConfig(level=logging.INFO)
 
 PROJECT_NAME = 'BronatrsmeiH'
 
-START_TIME = time.time()
-
 MANUAL_CONTROL = 0
 TARGET_TEMPERATURE = 21
 HIST_GOAL = .05  # accept +/- .05 degC
@@ -29,11 +27,16 @@ HIST_GOAL = .05  # accept +/- .05 degC
 SYSTEM_CONFIG = Config('SYSTEM_CONFIG.json')
 LOCAL_TIME = Localtime(SYSTEM_CONFIG.get('utc_offset'))
 
+# Get start time after creating the Localtime, because this will change the system time.
+START_TIME = time.time()
+
 
 # duration, target temperature, start time (temperature reached)
-recipe = Recipe([Stage('Preheat', 0, 70, 'Add malt and cooked oats'),
-                 Stage('Maichen phase1', 60 * 60, 67),
-                 Stage('Maichen phase2', 10 * 60, 74, 'Filter/remove grains'),
+recipe = Recipe([Stage('Preheat', 0, 65, 'Add malt and cooked oats'),
+                 Stage('Maichen phase1', 30 * 60, 63),
+                 Stage('Maichen phase2', 15 * 60, 67),
+                 Stage('Maichen phase3', 30 * 60, 72),
+                 Stage('Maichen phase4', 5 * 60, 77, 'Filter/remove grains'),
                  Stage('Boil phase1', 30 * 60, 100, 'Add first hops'),
                  Stage('Boil phase2', 50 * 60, 100, 'Add rest of hops and sugar'),
                  Stage('Boil phase3', 10 * 60, 100, 'Whirlpool and start cooling'),
@@ -42,6 +45,7 @@ recipe = Recipe([Stage('Preheat', 0, 70, 'Add malt and cooked oats'),
 
 class Heater():
     """Control the heater of the kettle."""
+
     def __init__(self, pin=13):
         self.pin = Pin(pin, Pin.OUT)
         self.state = None
@@ -70,6 +74,7 @@ state.set_info('Target temperature', TARGET_TEMPERATURE)
 
 class Kettle():
     """Control the brewing kettle."""
+
     def __init__(self, temperature, heater, recipe, interval=1):
         """Constructor.
         @param period   The duration to measure. [s]
