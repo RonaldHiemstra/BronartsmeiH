@@ -76,7 +76,7 @@ class Recipe():
         html = '''\
 <h2>Recipe</h2>
 <p><table>
-  <tr><th>duration<br/>[min]</th><th>temperature<br/>[&deg;C]</th><th>start</th><th>end</th><th>progress<br/>[%%]</th>\
+  <tr><th>duration<br/>[min]</th><th>temperature<br/>[&deg;C]</th><th>start</th><th>end</th><th>progress<br/>[%]</th>\
 <th style="text-align:left">action</th></tr>
 '''
         message = None

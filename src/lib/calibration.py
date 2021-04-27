@@ -46,9 +46,9 @@ class Calibration():
             self._config.set(self._format_raw(steps - 1), max_temp)
         self._update_steps()
 
-    def _format_raw(self, raw_value: int) -> str:
+    def _format_raw(self, raw_value) -> str:
         """Convert the raw_value to a json key_value."""
-        return self.key_formatter % raw_value
+        return self.key_formatter % int(raw_value)
 
     def _update_steps(self):
         # make config sorted
@@ -78,7 +78,7 @@ class Calibration():
         self._config.set(self._format_raw(raw_value), float(calibrated_value))
         self._update_steps()
 
-    def remove(self, raw_value: int):
+    def remove(self, raw_value):
         """Remove the given calibrated value from the calibration matrix."""
         self._config.remove(self._format_raw(raw_value))
         self._update_steps()
