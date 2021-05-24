@@ -6,7 +6,15 @@
 
 [Documentation](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/hw-reference/modules-and-boards.html#esp32-devkitc-v4)
 
+[ESP32 WROOM-32 datasheet](https://www.espressif.com/sites/default/files/documentation/esp32-wroom-32_datasheet_en.pdf)
+
 ![functional overview](./images/esp32-devkitc-functional-overview.jpg)
+
+#### ADC (analog to digital conversion)
+
+The onboard ADC is not very accurate. Therefore the ADS1115 will be used from now on.
+
+Cheap ADS1115 can be ordered on [AliExpress](https://nl.aliexpress.com/wholesale?SearchText=ads1115)
 
 ### Hothap Grill thermometer
 
@@ -21,21 +29,26 @@
 
 ![Hothap Grill thermometer](./images/518WUiv-04L._AC_SL1024_.jpg)
 
-Resistance per temperature:
+NTC parameters:
 
-| kohm | degC |
-| --- | --- |
-| 7 | 100 |
-| 105 | 24 |
-| 255 | 6 |
+* R~25~ = ~102500 Ω
+* β = ~4000 K
 
-Add a resistor of 22k in series to have a nice (quite linear) voltage divider.
+![ntc-voltage-divider](./images/ntc-voltage-divider.png)
 
-#### ADC (analog to digital conversion)
+See [Measuring the temperature with NTCs](https://www.giangrandi.org/electronics/ntc/ntc.shtml) for more information.
 
-The onboard ADC is not very accurate. Therefore the ADS1115 will be used from now on.
+#### Control the kettle temperature
 
-Cheap ADS1115 can be ordered on [AliExpress](https://nl.aliexpress.com/wholesale?SearchText=ads1115)
+Add a resistor of 27 KΩ in series.
+
+The temperature around 57 °C results in a linear ADC input. Which is good to measure the kettle temperature between 20 and 100 °C.
+
+#### Control the fridge temperature
+
+Add a resistor of 150 KΩ in series.
+
+The temperature around 16 °C results in a linear ADC input. Which is excellent to measure the fridge temperature.
 
 ### RaspberryPi running DietPi
 

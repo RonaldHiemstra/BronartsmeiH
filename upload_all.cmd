@@ -46,6 +46,7 @@ exit /b
 :UPLOAD_FILES
 rem password: ^%1
 call :UPLOAD_FILE %1 "%~dp0src\system_config.json"
+call :UPLOAD_FILE %1 "%~dp0src\hardware_config.json"
 pushd src
 for /R %%f in (*.py) do call :UPLOAD_FILE %1 "%%f"
 popd
