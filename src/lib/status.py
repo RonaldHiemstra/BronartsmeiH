@@ -2,69 +2,52 @@
 
 The method state.update() should be called at a regular base, to make sure LEDs will blink.
 """
-import logging
 import time
 from machine import Pin
-# TODO: implement actual control of the LEDs.
-# TODO: add asyncio support, so the call to update() is no longer needed.
+from config import Config
+import uasyncio as asyncio
+
 # TODO: also send the info (and alert) messages (with color info) to the webpage info bar.
 # Note: update() is likely still needed in the boot process...
-class _Status:
-    STARTING = 0
-    MAICHEN = 1
-    BOILING = 2
-    COOLING = 3
-    FERMENTING = 4
-    MATURING = 5
-    _NR_OF_PHASES = 6
 
+BLINK_INTERVAL = 0.3  # Toggle blinking LEDs every 0.3 seconds
+
+class _Status:
     RED = 1
     GREEN = 2
-    BLUE = 4
-    WHITE = 7
     BLINK = 16
 
     def __init__(self):
-        self._last_update = 0
-        self._leds = [0 for _ in range(self._NR_OF_PHASES)]
-        self._prev = self._leds.copy()
-        self._blink_on = True
         self._alert = dict()
         self.info = dict()
         self.last_info_key = None
-        self.set_state(self.STARTING, self.RED | self.BLINK, 'Booting')
+        self.set_state('_Starting', self.RED | self.BLINK, 'Booting')
 
-    def set_state(self, phase, color, info):
+    def set_state(self, phase: str, color: int, info: str):
         """Set the current state of the brewery."""
-        if phase >= self._NR_OF_PHASES:
-            logging.error('wrong phase: %d', phase)
-            return
-        self._leds[phase] = color
         self._current_phase = phase
-        self.set_info(['Starting', 'Maichen', 'Boiling', 'Cooling', 'Fermenting', 'Maturing'][phase], info)
-        self.update(True)
+        self.set_info(phase, info)
+        self.update(phase, color)
 
-    def update(self, force_update=False):
+    def update(self, phase: str = None, color: int = None):
+        """Update the status LEDs.
+        params:
+            phase  if specified, force an update of the LEDs.
+        """
+
+    def start_auto_update(self):
+        """Update (blink) the status LEDS automatically"""
+        self.set_state('_Starting', self.GREEN, 'Ready')
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._auto_update())
+
+    async def _auto_update(self) -> None:
         """Update the status LEDs."""
-        if force_update:
-            self._blink_on = True
-        now = time.time()
-        # take the abs difference, to be robust for jumps in time due to time synchronization
-        if force_update or abs(now - self._last_update) > 0.3:
-            self._last_update = now
-            for index in range(self._NR_OF_PHASES):
-                if (self._leds[index] != self._prev[index]) or (self._leds[index] & self.BLINK):
-                    self._prev[index] = self._leds[index]
-                    color = (self._prev[index] & (self.BLINK - 1)) if self._leds[index] & self.BLINK == 0 or self._blink_on else 0
-                    print('LED %d = %d' % (index, color))
-                    self._set_led(index, color)
+        while True:
+            self.update()
+            await asyncio.sleep(BLINK_INTERVAL)
 
-            self._blink_on = not self._blink_on
-
-    def _set_led(self, index: int, color: int):
-        """Set the specified led to the given color."""
-
-    def set_info(self, key: str, message: str) -> None:
+    def set_info(self, key: str, message: str):
         """Store and log informational message.
 
         @param key      Message source.
@@ -76,11 +59,11 @@ class _Status:
             self.last_info_key = key
         print('%s: %s' % (key, message), end='\r')
 
-    def get_info(self):
+    def get_info(self) -> dict:
         """Get all informational messages."""
         return self.info.copy()
 
-    def alert(self, key: str, message:str) -> None:
+    def alert(self, key: str, message: str):
         """Store and allert a message.
 
         @param key      Message source.
@@ -98,16 +81,65 @@ class _Status:
         print('!' * 40)
         print('ALERT! %s: %s' % (key, message))
 
-class TestStatus(_Status):
+
+class Status2Leds(_Status):
     """Test status, using single color LEDS, connected to the EPS digital output."""
-    def __init__(self):
-        self.pins = [Pin(pin, Pin.OUT) for pin in [12, 14, 27, 26, 25, 33]]
-        assert len(self.pins) == self._NR_OF_PHASES
+
+    def __init__(self, red: str, green: str):
+        io_connections = Config('hardware_config.json')
+        self.red = Pin(int(io_connections.get(red)), Pin.OUT)
+        self.green = Pin(int(io_connections.get(green)), Pin.OUT)
+        self.red.value(0)
+        self.green.value(0)
+        self._last_update = 0
+        self.phases = dict()
+        self._blink_on = True
+        self.prev_red_state = 0
+        self.prev_green_state = 0
         super().__init__()
 
-    def _set_led(self, index: int, color: int):
-        """Set the specified led to the given color."""
-        self.pins[index].value(1 if color else 0) # The test led only supports 1 color.
+    def update(self, phase: str = None, color: int = None):
+        """Update the status LEDs.
+        params:
+            phase  if specified, force an update of the LEDs.
+        """
+        # Add the given phase at the end of the list (or remove it, if no color is given)
+        if phase in self.phases:
+            del self.phases[phase]
+        if color:
+            self.phases[phase] = color
+
+        now = time.time()
+        # take the abs difference, to be robust for jumps in time due to time synchronization
+        if phase is not None or abs(now - self._last_update) > BLINK_INTERVAL:
+            self._last_update = now
+            if phase is not None:
+                self._blink_on = True  # Force an update of the LEDs
+            else:
+                self._blink_on = not self._blink_on  # Toggle blink status
+
+            # Determine red and green LED state
+            red_state = 0
+            green_state = 0
+            for cur_color in self.phases.values():
+                if cur_color & self.RED:
+                    red_state = cur_color
+                if cur_color & self.GREEN:
+                    green_state = cur_color
+
+            if not self._blink_on:
+                # Set blinking LEDs off
+                if red_state & self.BLINK:
+                    red_state = 0
+                if green_state & self.BLINK:
+                    green_state = 0
+
+            if red_state != self.prev_red_state:
+                self.prev_red_state = red_state
+                self.red.value(red_state)
+            if green_state != self.prev_green_state:
+                self.prev_green_state = green_state
+                self.green.value(green_state)
 
 
-state = TestStatus()
+state = Status2Leds(red='led.red', green='led.green')

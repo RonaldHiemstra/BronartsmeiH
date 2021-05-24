@@ -14,25 +14,35 @@ from config import Config
 from localtime import Localtime
 from recipe import Recipe, Stage
 from status import state
-from temperature import TemperatureADS1115 as Temperature
+from temperature import temperature as Temperature
 
 logging.basicConfig(level=logging.INFO)
 
-PROJECT_NAME = 'BronatrsmeiH'
+
+async def push_event(**event):
+    """Push an event.
+    @param event  dict where key is a named div in the body and value will be filled in the div.
+    """
+    await _push_data(event_sinks, json.dumps(event))
+
 
 MANUAL_CONTROL = 0
 TARGET_TEMPERATURE = 21
 HIST_GOAL = .05  # accept +/- .05 degC
 
-SYSTEM_CONFIG = Config('SYSTEM_CONFIG.json')
+SYSTEM_CONFIG = Config('system_config.json')
+HARDWARE_CONFIG = Config('hardware_config.json')
+PROJECT_NAME = SYSTEM_CONFIG.get('project_name', 'BronatrsmeiH')
 LOCAL_TIME = Localtime(SYSTEM_CONFIG.get('utc_offset'))
 
 # Get start time after creating the Localtime, because this will change the system time.
 START_TIME = time.time()
 
 
+ENVIRONMENT_TEMPERATURE = Temperature('environment temperature', HARDWARE_CONFIG, push_event)
+
 # duration, target temperature, start time (temperature reached)
-recipe = Recipe([Stage('Preheat', 0, 65, 'Add malt and cooked oats'),
+RECIPE = Recipe([Stage('Preheat', 0, 65, 'Add malt and cooked oats'),
                  Stage('Maichen phase1', 30 * 60, 63),
                  Stage('Maichen phase2', 15 * 60, 67),
                  Stage('Maichen phase3', 30 * 60, 72),
@@ -43,42 +53,51 @@ recipe = Recipe([Stage('Preheat', 0, 65, 'Add malt and cooked oats'),
                  Stage('Cooling', 0, 20, 'Transfer wort to fermentation vessel and add yeast', False)])
 
 
-class Heater():
+class PowerSwitch():
     """Control the heater of the kettle."""
 
-    def __init__(self, pin=13):
+    def __init__(self, device_name, pin=13, callback=None):
+        self.device_name = device_name
         self.pin = Pin(pin, Pin.OUT)
         self.state = None
+        self.callback = callback
 
-    def turn_on(self):
+    async def turn_on(self):
         """Turn the heater on."""
         if self.state is not 1:
             self.state = 1
             self.pin.value(self.state)
-            state.set_info('Heater', 'ON')
+            state.set_info(self.device_name, 'ON')
+            if self.callback:
+                await self.callback(**{self.device_name: 'ON'})
 
-    def turn_off(self):
+    async def turn_off(self):
         """Turn the heater off."""
         if self.state is not 0:
             self.state = 0
             self.pin.value(self.state)
-            state.set_info('Heater', 'OFF')
+            state.set_info(self.device_name, 'OFF')
+            if self.callback:
+                await self.callback(**{self.device_name: 'OFF'})
 
 
-heater = Heater()
-TEMPERATURE = Temperature()
+HEATER = PowerSwitch('kettle switch', int(HARDWARE_CONFIG.get('kettle switch')), callback=push_event)
+KETTLE_TEMPERATURE = Temperature('kettle temperature', hardware_config=HARDWARE_CONFIG, callback=push_event)
 
-TARGET_TEMPERATURE = recipe.stages[0].temperature
+TARGET_TEMPERATURE = RECIPE.stages[0].temperature
 state.set_info('Target temperature', TARGET_TEMPERATURE)
 
 
 class Kettle():
     """Control the brewing kettle."""
 
-    def __init__(self, temperature, heater, recipe, interval=1):
+    def __init__(self, temperature: Temperature, heater: PowerSwitch, recipe, interval=0.5):
         """Constructor.
-        @param period   The duration to measure. [s]
-        @param interval Issue a measurement at every interval. [s]
+        params:
+            temperature   Temperature measurement device.
+            heater        Heater switch.
+            recipe        Brewing recipe.
+            interval      Frequency to check recipe and temperature every [s].
         """
         self.temperature = temperature
         self.heater = heater
@@ -93,48 +112,71 @@ class Kettle():
         """Control the temperature of the brewing kettle."""
         while True:
             temperature = self.temperature.get()
-            await push_event(temperature=temperature)
+            #await push_event(temperature=temperature)
 
             # DEBUG: using full automation...
             if self.manual_control:
                 target_temperature = self.manual_target_temperature
             else:
-                target_temperature = recipe.get_target_temperature(temperature)
+                target_temperature = self.recipe.get_target_temperature(temperature)
 
             if target_temperature is not None:
-                if temperature < (target_temperature - temperature.histeresis):
-                    await push_event(heater_state='ON')
-                    self.heater.turn_on()
-                elif temperature > (target_temperature + temperature.histeresis):
-                    await push_event(heater_state='OFF')
-                    self.heater.turn_off()
-            await asyncio.sleep(1)
+                if temperature < target_temperature:
+                    if not self.heater.state:
+                        await self.heater.turn_on()
+                elif temperature > target_temperature:
+                    if self.heater.state:
+                        await self.heater.turn_off()
+            await asyncio.sleep(self.interval)
 
 
-async def temp_control():
-    """Control the temperature of the brewing kettle."""
-    # TODO: use Kettle class!
-    while True:
-        temp = TEMPERATURE.get()
-        await push_event(temperature=temp)
+KETTLE = Kettle(KETTLE_TEMPERATURE, HEATER, RECIPE)
 
-        # DEBUG: using full automation...
-        if MANUAL_CONTROL:
-            target_temperature = TARGET_TEMPERATURE
-        else:
-            target_temperature = recipe.get_target_temperature(temp)
 
-        if target_temperature is not None:
-            if temp < (target_temperature - HIST_GOAL):
-                if not heater.state:
-                    await push_event(heater_state='ON')
-                    heater.turn_on()
-            elif temp > (target_temperature + HIST_GOAL):
-                if heater.state:
-                    await push_event(heater_state='OFF')
-                    heater.turn_off()
-        await asyncio.sleep(1)
+class Fridge():
+    """Control the brewing fridge."""
 
+    def __init__(self, temperature: Temperature, heater: PowerSwitch, cooler: PowerSwitch, interval=10):
+        """Constructor.
+        params:
+            temperature   Temperature measurement device.
+            heater        Fridge heater switch.
+            cooler        Fridge switch.
+            interval      Frequency to check recipe and temperature every [s].
+        """
+        self.temperature = temperature
+        self.heater = heater
+        self.cooler = cooler
+        self.interval = interval
+        self.target_temperature = 13
+        self.histeresis = 0.5  # constoll within +/- 0.5 degrees
+        loop = asyncio.get_event_loop()
+        loop.create_task(self._control())
+
+    async def _control(self):
+        """Control the temperature of the brewing kettle."""
+        while True:
+            interval = self.interval
+            temperature = self.temperature.get()
+            #await push_event(temperature=temperature)
+
+            if temperature < self.target_temperature and self.cooler.state:
+                await self.cooler.turn_off()
+                interval = 300  # Don't switch cooler within 5 minutes
+            if temperature < (self.target_temperature - self.histeresis) and not self.heater.state:
+                await self.heater.turn_on()
+            if temperature > self.target_temperature and self.heater.state:
+                await self.heater.turn_off()
+            if temperature > (self.target_temperature + self.histeresis) and not self.cooler.state:
+                await self.cooler.turn_on()
+                interval = 300  # Don't switch cooler within 5 minutes
+            await asyncio.sleep(interval)
+
+
+FRIDGE_TEMPERATURE = Temperature('fridge temperature', hardware_config=HARDWARE_CONFIG, callback=push_event)
+FRIDGE_HEATER = PowerSwitch('fridge heater switch', int(HARDWARE_CONFIG.get('fridge heater switch')), callback=push_event)
+FRIDGE_COOLER = PowerSwitch('fridge switch', int(HARDWARE_CONFIG.get('fridge switch')), callback=push_event)
+FRIDGE = Fridge(FRIDGE_TEMPERATURE, FRIDGE_HEATER, FRIDGE_COOLER)
 
 def get_html_header(req, _resp, project_name):
     """Get HTML header and generic top of body containing the current temperature and heater state."""
@@ -163,16 +205,37 @@ Content-Type: text/html
     <script>
       var source = new EventSource("sse_events");
       source.onmessage = function(event) {{
+        var now = new Date();
+        document.getElementById("time").innerHTML = now.toLocaleString();
         var data = JSON.parse(event.data);
         if (data.temperature)
         {{
-          var now = new Date();
           document.getElementById("temperature").innerHTML = data.temperature.toFixed(2);
-          document.getElementById("time").innerHTML = now.toLocaleString();
         }}
-        if (data.heater)
+        else if (data.heater)
         {{
-          document.getElementById("heater_state").innerHTML = data.heater;
+          document.getElementById("kettle switch").innerHTML = data.heater;
+        }}
+        else
+        {{
+            for (var key in data)
+            {{
+              var doc_id = document.getElementById(key)
+              var value = data[key];
+              if (doc_id)
+              {{
+                if (Number(value) === value && value % 1 !== 0)
+                {{
+                    value = value.toFixed(2);
+                }}
+                doc_id.innerHTML = value;
+              }}
+              else
+              {{
+                console.log("missing placeholder for " + key + ": " + value);
+                document.body.innerHTML += '<p>' + key + '<b id="' + key + '">' + value + '</p>';
+              }}
+            }}
         }}
       }}
       source.onerror = function(error) {{
@@ -185,10 +248,20 @@ Content-Type: text/html
   <body>
     <h1><a href="/">{project_name} Web Server</a></h1>
     <p>Last update: <b id="time"></b></p>
-    <p>Temperature: <b id="temperature">{temperature}</b><b> &deg;C</b></p>
-    <p>Kettle state: <b id="heater_state">{heater_state}</b></p>
+    <p>Kettle Temperature: <b id="kettle temperature"></b> <b>{temperature_unit}</b></p>
+    <p>Kettle switch: <b id="kettle switch">{heater_state}</b></p>
     <hr/>
-""".format(project_name=project_name, temperature=TEMPERATURE.get(), heater_state=('ON' if heater.state else 'OFF'))
+    <p>Fridge Temperature: <b id="fridge temperature"></b> <b>{temperature_unit}</b></p>
+    <p>Fridge switch: <b id="fridge switch">{fridge_state}</b></p>
+    <p>Fridge heater switch: <b id="fridge heater switch">{fridge_heater_state}</b></p>
+    <hr/>
+    <p>Environment Temperature: <b id="environment temperature"></b> <b>{temperature_unit}</b></p>
+    <hr/>
+""".format(project_name=project_name,
+           temperature=KETTLE_TEMPERATURE.get(), temperature_unit=KETTLE_TEMPERATURE.unit,
+           heater_state=('ON' if HEATER.state else 'OFF'),
+           fridge_state=('ON' if FRIDGE.cooler.state else 'OFF'),
+           fridge_heater_state=('ON' if FRIDGE.heater.state else 'OFF'))
 
     log_msg = list()
     req.parse_qs()
@@ -213,15 +286,14 @@ def get_html_footer(current_page):
         pagerefs.append('<a href="/">Automatic control</a>')
     if current_page != '/manual':
         pagerefs.append('<a href="/manual">Manual control</a>')
-    if current_page != '/calibration':
-        pagerefs.append('<a href="/calibration">Temperature calibration</a>')
-    if len(pagerefs) == 2:
+    if len(pagerefs) == 1:
         pagerefs.append('<a href="%s">Refresh</a>' % current_page)
         pagerefs.append('<small>uptime: %d</small>' % (time.time() - START_TIME))
     else:
         log_msg = '<hr/><p style="color:red">current_page "%s" is not (yet) supported...</p>\n' % current_page
     return log_msg + """\
     <hr/>
+    <p id="log"></p>
     <p>%s</p>
   </body>
 </html>""" % ' | '.join(pagerefs)
@@ -259,13 +331,6 @@ async def _push_data(sinks, data):
 
     for resp in to_del:
         sinks.remove(resp)
-
-
-async def push_event(**event):
-    """Push an event.
-    @param event  dict where key is a named div in the body and value will be filled in the div.
-    """
-    await _push_data(event_sinks, json.dumps(event))
 
 
 def set_value(obj, key, value, log_msg):
@@ -318,17 +383,8 @@ def index(req, resp):
 <h2 style="color:red">Manual mode is enabled</h2>
 <p><a href="/?MANUAL_CONTROL=0"><button class="button button_on">Disable manual mode</button></a></p>
 ''')
-    yield from resp.awrite(recipe.web_page('recipe'))
+    yield from resp.awrite(RECIPE.web_page('RECIPE'))
     yield from resp.awrite(get_html_footer('/'))
-
-
-def calibration(req, resp):
-    """Temperature calibration web page."""
-    yield from resp.awrite(get_html_header(req, resp, PROJECT_NAME))
-    yield from resp.awrite(TEMPERATURE.calibration.web_page('TEMPERATURE'))
-    yield from resp.awrite('<hr/>\n')
-    yield from resp.awrite(TEMPERATURE.get_calibrated_details_page('TEMPERATURE'))
-    yield from resp.awrite(get_html_footer('/calibration'))
 
 
 def manual(req, resp):
@@ -346,7 +402,7 @@ def manual(req, resp):
   <input type="number" id="TARGET_TEMPERATURE" name="TARGET_TEMPERATURE" value="%.0f">
   <input type="submit" formmethod="get" value="Submit">
 </form>
-''' % (recipe.get_target_temperature())
+''' % (RECIPE.get_target_temperature())
 
     if TARGET_TEMPERATURE is None:
         html += '''\
@@ -359,13 +415,13 @@ def manual(req, resp):
 <p>Target temperature: %.1f (%.2f..%.2f)</p>
 ''' % (TARGET_TEMPERATURE, TARGET_TEMPERATURE - HIST_GOAL, TARGET_TEMPERATURE + HIST_GOAL)
 
-    if heater.state:
+    if HEATER.state:
         html += '''\
-<p><a href="/manual?heater=turn_off&TARGET_TEMPERATURE="><button class="button button_off">turn kettle OFF</button></a></p>
+<p><a href="/manual?HEATER=turn_off&TARGET_TEMPERATURE="><button class="button button_off">turn kettle OFF</button></a></p>
 '''
     else:
         html += '''\
-<p><a href="/manual?heater=turn_on&TARGET_TEMPERATURE="><button class="button button_on">turn kettle ON</button></a></p>
+<p><a href="/manual?HEATER=turn_on&TARGET_TEMPERATURE="><button class="button button_on">turn kettle ON</button></a></p>
 '''
     yield from resp.awrite(html)
     yield from resp.awrite(get_html_footer('/manual'))
@@ -379,15 +435,11 @@ def main():
     """
     routes = [
         ("/", index),
-        ('/calibration', calibration),
         ('/manual', manual),
         ("/sse_events", sse_events),
     ]
 
     app = picoweb.WebApp(__name__, routes)
-
-    loop = asyncio.get_event_loop()
-    loop.create_task(temp_control())
 
     weblog = logging.getLogger("picoweb")
     weblog.setLevel(logging.WARNING)

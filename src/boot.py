@@ -7,9 +7,13 @@ import time
 import esp
 import network
 import webrepl
-from config import Config
-from status import state
-
+try:
+    from config import Config
+    from status import state
+except ImportError:
+    # Try to (hardcoded) connect to WIFI and start webrepl
+    import recovery_boot
+    raise
 
 esp.osdebug(None)
 gc.collect()
@@ -37,7 +41,7 @@ def connect_wifi(essid, password, accesspoints, timeout=60):
     if not wlan.isconnected():
         print('connecting to network: %s...' % essid)
         wlan.connect(essid, password)
-        state.set_state(state.STARTING, state.GREEN | state.BLINK, 'Connecting to access point')
+        state.set_state('WIFI', state.GREEN | state.BLINK, 'Connecting to access point')
         start_time = time.time()
         while not wlan.isconnected():
             print('.', end='')
@@ -46,10 +50,10 @@ def connect_wifi(essid, password, accesspoints, timeout=60):
                 print('\nFailed to connect within %ds' % timeout)
                 wlan.disconnect()
                 wlan.active(False)
-                state.set_state(state.STARTING, state.RED, 'Failed to connected to access point')
+                state.set_state('WIFI', state.RED, 'Failed to connected to access point')
                 return False
             time.sleep(0.3)
-    state.set_state(state.STARTING, state.GREEN, 'Connected to access point')
+    state.set_state('WIFI', state.GREEN, 'Connected to access point')
     print('\nnetwork config:', wlan.ifconfig())
     return True
 
@@ -61,7 +65,7 @@ def start_ap():
     essid = 'ESP-brewery_%d' % hash(wlan.config('mac'))
     wlan.active(True)
     wlan.config(essid=essid)
-    state.set_state(state.STARTING, state.BLUE | state.BLINK, 'Access point active')
+    state.set_state('WIFI', state.GREEN | state.RED | state.BLINK, 'Access point active')
 
 
 detected_accesspoints = set()
@@ -70,3 +74,5 @@ if not connect_wifi(system_config.get('ssid'), system_config.get('__password'), 
     start_ap()
 
 webrepl.start()
+
+state.start_auto_update()
