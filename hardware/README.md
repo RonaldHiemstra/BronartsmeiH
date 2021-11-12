@@ -50,6 +50,10 @@ Add a resistor of 150 KΩ in series.
 
 The temperature around 16 °C results in a linear ADC input. Which is excellent to measure the fridge temperature.
 
+## iSpindel
+
+Use an [iSpindel](iSpindel.md) to monitor the fermentation process.
+
 ## Check this
 
 Bunch of interesting links: <http://awesome-micropython.com/>
