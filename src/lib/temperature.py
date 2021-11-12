@@ -8,7 +8,6 @@ import uasyncio as asyncio
 import dht
 
 from analog_in import Ads1115, AnalogInESP32
-from status import state
 
 LOG = logging.getLogger('temperature')
 LOG.setLevel(logging.INFO)
@@ -90,8 +89,8 @@ class TemperatureBase():
         slope, intercept = best_fit_slope_and_intercept(list(range(nr_of_measurements)), self.measurements)
         #LOG.debug('slope: %.1f, intercept: %.1f' % (slope, intercept))
         predicted_temp = intercept + slope * (nr_of_measurements + (estimate / self.interval))
-        state.set_info('Temperature',
-                       '%.1f (stdev: %.2f); predicted: %.1f' % (avg_temperature, stdev(self.measurements), predicted_temp))
+        LOG.debug('%s: %.1f (stdev: %.2f); predicted: %.1f',
+                  self.device_name, avg_temperature, stdev(self.measurements), predicted_temp)
         return predicted_temp
 
 

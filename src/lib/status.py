@@ -3,14 +3,46 @@
 The method state.update() should be called at a regular base, to make sure LEDs will blink.
 """
 import time
-from machine import Pin
+from machine import Pin, RTC
 from config import Config
 import uasyncio as asyncio
+import uio
 
 # TODO: also send the info (and alert) messages (with color info) to the webpage info bar.
 # Note: update() is likely still needed in the boot process...
 
 BLINK_INTERVAL = 0.3  # Toggle blinking LEDs every 0.3 seconds
+
+
+class Log(uio.StringIO):
+    """Log in memory.
+    The first (run-in) buffer is always kept.
+    And the last nr of buffers are also kept.
+    """
+    BUFFER_SIZE = 30
+    NR_OF_ROLLING_BUFFERS = 2
+
+    def __init__(self):
+        self.run_in = list()
+        self.buffers = [list() for _ in range(self.NR_OF_ROLLING_BUFFERS)]
+        self.log = self.run_in
+        self.index = 0
+
+    def write(self, s):
+        """Add message to the log buffer."""
+        if s.strip():
+            self.log.append(s)
+        if len(self.log) > self.BUFFER_SIZE:
+            self.index = (self.index + 1) % self.NR_OF_ROLLING_BUFFERS
+            self.log = self.buffers[self.index]
+            self.log.clear()
+
+    def get(self):
+        """Get the logged messages."""
+        lines = self.run_in.copy()
+        for i in range(self.NR_OF_ROLLING_BUFFERS):
+            lines += self.buffers[(self.index + i + 1) % self.NR_OF_ROLLING_BUFFERS]
+        return lines #+ self.getvalue().split('\n')
 
 class _Status:
     RED = 1
@@ -20,7 +52,6 @@ class _Status:
     def __init__(self):
         self._alert = dict()
         self.info = dict()
-        self.last_info_key = None
         self.set_state('_Starting', self.RED | self.BLINK, 'Booting')
 
     def set_state(self, phase: str, color: int, info: str):
@@ -53,15 +84,21 @@ class _Status:
         @param key      Message source.
         @param message  The message to store.
         """
-        self.info[key] = message
-        if self.last_info_key and self.last_info_key != key:
-            print('')
-            self.last_info_key = key
-        print('%s: %s' % (key, message), end='\r')
+        now = list(RTC().datetime())
+        self.info[key] = ('%04d-%02d-%02d %02d:%02d:%02d' % (now[0], now[1], now[2], now[4], now[5], now[6]),
+                          message)
 
-    def get_info(self) -> dict:
-        """Get all informational messages."""
-        return self.info.copy()
+    def get_info(self):
+        """Get all informational messages.
+        Return a list of messages containing:
+          ( severity, date-time, topic, message )
+        """
+        info = list()
+        for key, value in self.info.items():
+            info.append((0, value[0], key, value[1]))
+        for key, value in self._alert.items():
+            info.append((1, value[0], key, value[1]))
+        return sorted(info)
 
     def alert(self, key: str, message: str):
         """Store and allert a message.
@@ -72,13 +109,11 @@ class _Status:
         if message is None:
             del self._alert[key]
             return
-        if self._alert.get(key) == message:
+        if self._alert.get(key, (None, None))[1] == message:
             return
-        self._alert[key] = message
-        if self.last_info_key:
-            self.last_info_key = None
-            print('')
-        print('!' * 40)
+        now = list(RTC().datetime())
+        self._alert[key] = ('%04d-%02d-%02d %02d:%02d:%02d' % (now[0], now[1], now[2], now[4], now[5], now[6]),
+                            message)
         print('ALERT! %s: %s' % (key, message))
 
 
@@ -143,3 +178,5 @@ class Status2Leds(_Status):
 
 
 state = Status2Leds(red='led.red', green='led.green')
+
+logging = Log()

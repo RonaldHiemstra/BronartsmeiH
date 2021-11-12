@@ -2,6 +2,7 @@
 
 Script includes a hardcoded brewing schedule for Brönald #4 - Vier De Bier.
 """
+import gc
 import json
 import logging
 import time
@@ -13,10 +14,12 @@ import picoweb
 from config import Config
 from localtime import Localtime
 from recipe import Recipe, Stage
+import status
 from status import state
 from temperature import temperature as Temperature
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, stream=status.logging)
+gc.collect()
 
 
 async def push_event(**event):
@@ -56,32 +59,27 @@ RECIPE = Recipe([Stage('Preheat', 0, 65, 'Add malt and cooked oats'),
 class PowerSwitch():
     """Control the heater of the kettle."""
 
-    def __init__(self, device_name, pin=13, callback=None):
+    def __init__(self, device_name, pin=13):
         self.device_name = device_name
         self.pin = Pin(pin, Pin.OUT)
         self.state = None
-        self.callback = callback
 
-    async def turn_on(self):
+    def turn_on(self):
         """Turn the heater on."""
         if self.state is not 1:
             self.state = 1
             self.pin.value(self.state)
             state.set_info(self.device_name, 'ON')
-            if self.callback:
-                await self.callback(**{self.device_name: 'ON'})
 
-    async def turn_off(self):
+    def turn_off(self):
         """Turn the heater off."""
         if self.state is not 0:
             self.state = 0
             self.pin.value(self.state)
             state.set_info(self.device_name, 'OFF')
-            if self.callback:
-                await self.callback(**{self.device_name: 'OFF'})
 
 
-HEATER = PowerSwitch('kettle switch', int(HARDWARE_CONFIG.get('kettle switch')), callback=push_event)
+HEATER = PowerSwitch('kettle switch', int(HARDWARE_CONFIG.get('kettle switch')))
 KETTLE_TEMPERATURE = Temperature('kettle temperature', hardware_config=HARDWARE_CONFIG, callback=push_event)
 
 TARGET_TEMPERATURE = RECIPE.stages[0].temperature
@@ -91,7 +89,7 @@ state.set_info('Target temperature', TARGET_TEMPERATURE)
 class Kettle():
     """Control the brewing kettle."""
 
-    def __init__(self, temperature: Temperature, heater: PowerSwitch, recipe, interval=0.5):
+    def __init__(self, temperature: Temperature, heater: PowerSwitch, recipe, interval=0.5, callback=None):
         """Constructor.
         params:
             temperature   Temperature measurement device.
@@ -103,6 +101,7 @@ class Kettle():
         self.heater = heater
         self.recipe = recipe
         self.interval = interval
+        self.callback = callback
         self.manual_control = False
         self.manual_target_temperature = None
         loop = asyncio.get_event_loop()
@@ -112,7 +111,6 @@ class Kettle():
         """Control the temperature of the brewing kettle."""
         while True:
             temperature = self.temperature.get()
-            #await push_event(temperature=temperature)
 
             # DEBUG: using full automation...
             if self.manual_control:
@@ -123,20 +121,24 @@ class Kettle():
             if target_temperature is not None:
                 if temperature < target_temperature:
                     if not self.heater.state:
-                        await self.heater.turn_on()
+                        self.heater.turn_on()
+                        if self.callback:
+                            await self.callback(**{self.heater.device_name: 'ON'})
                 elif temperature > target_temperature:
                     if self.heater.state:
-                        await self.heater.turn_off()
+                        self.heater.turn_off()
+                        if self.callback:
+                            await self.callback(**{self.heater.device_name: 'OFF'})
             await asyncio.sleep(self.interval)
 
 
-KETTLE = Kettle(KETTLE_TEMPERATURE, HEATER, RECIPE)
+KETTLE = Kettle(KETTLE_TEMPERATURE, HEATER, RECIPE, callback=push_event)
 
 
 class Fridge():
     """Control the brewing fridge."""
 
-    def __init__(self, temperature: Temperature, heater: PowerSwitch, cooler: PowerSwitch, interval=10):
+    def __init__(self, temperature: Temperature, heater: PowerSwitch, cooler: PowerSwitch, interval=10, callback=None):
         """Constructor.
         params:
             temperature   Temperature measurement device.
@@ -148,7 +150,11 @@ class Fridge():
         self.heater = heater
         self.cooler = cooler
         self.interval = interval
-        self.target_temperature = 13
+        self.callback = callback
+        # FIXME!!!
+        # Target temperature for Brönald #4 is 13, but the software crashes very often :(
+        # so for now just make sure the fridge is turned on and use the temperature of the fridge itself.
+        self.target_temperature = 3
         self.histeresis = 0.5  # constoll within +/- 0.5 degrees
         loop = asyncio.get_event_loop()
         loop.create_task(self._control())
@@ -156,27 +162,37 @@ class Fridge():
     async def _control(self):
         """Control the temperature of the brewing kettle."""
         while True:
+            gc.collect()
+            state.set_info('RAM', 'free {} alloc {}'.format(gc.mem_free(), gc.mem_alloc()))
             interval = self.interval
             temperature = self.temperature.get()
-            #await push_event(temperature=temperature)
 
             if temperature < self.target_temperature and self.cooler.state:
-                await self.cooler.turn_off()
-                interval = 300  # Don't switch cooler within 5 minutes
+                self.cooler.turn_off()
+                if self.callback:
+                    await self.callback(**{self.cooler.device_name: 'OFF'})
+                interval = 180  # Don't switch cooler within 3 minutes
             if temperature < (self.target_temperature - self.histeresis) and not self.heater.state:
-                await self.heater.turn_on()
+                self.heater.turn_on()
+                if self.callback:
+                    await self.callback(**{self.heater.device_name: 'ON'})
             if temperature > self.target_temperature and self.heater.state:
-                await self.heater.turn_off()
+                self.heater.turn_off()
+                if self.callback:
+                    await self.callback(**{self.heater.device_name: 'OFF'})
             if temperature > (self.target_temperature + self.histeresis) and not self.cooler.state:
-                await self.cooler.turn_on()
-                interval = 300  # Don't switch cooler within 5 minutes
+                self.cooler.turn_on()
+                if self.callback:
+                    await self.callback(**{self.cooler.device_name: 'ON'})
+                interval = 180  # Don't switch cooler within 3 minutes
             await asyncio.sleep(interval)
 
 
 FRIDGE_TEMPERATURE = Temperature('fridge temperature', hardware_config=HARDWARE_CONFIG, callback=push_event)
-FRIDGE_HEATER = PowerSwitch('fridge heater switch', int(HARDWARE_CONFIG.get('fridge heater switch')), callback=push_event)
-FRIDGE_COOLER = PowerSwitch('fridge switch', int(HARDWARE_CONFIG.get('fridge switch')), callback=push_event)
-FRIDGE = Fridge(FRIDGE_TEMPERATURE, FRIDGE_HEATER, FRIDGE_COOLER)
+FRIDGE_HEATER = PowerSwitch('fridge heater switch', int(HARDWARE_CONFIG.get('fridge heater switch')))
+FRIDGE_COOLER = PowerSwitch('fridge switch', int(HARDWARE_CONFIG.get('fridge switch')))
+FRIDGE = Fridge(FRIDGE_TEMPERATURE, FRIDGE_HEATER, FRIDGE_COOLER, callback=push_event)
+
 
 def get_html_header(req, _resp, project_name):
     """Get HTML header and generic top of body containing the current temperature and heater state."""
@@ -248,24 +264,26 @@ Content-Type: text/html
   <body>
     <h1><a href="/">{project_name} Web Server</a></h1>
     <p>Last update: <b id="time"></b></p>
-    <p>Kettle Temperature: <b id="kettle temperature"></b> <b>{temperature_unit}</b></p>
+    <p>Kettle Temperature: <b id="kettle temperature">~{kettle_temperature}</b> <b>{temperature_unit}</b></p>
     <p>Kettle switch: <b id="kettle switch">{heater_state}</b></p>
     <hr/>
-    <p>Fridge Temperature: <b id="fridge temperature"></b> <b>{temperature_unit}</b></p>
+    <p>Fridge Temperature: <b id="fridge temperature">~{fridge_temperature}</b> <b>{temperature_unit}</b></p>
     <p>Fridge switch: <b id="fridge switch">{fridge_state}</b></p>
     <p>Fridge heater switch: <b id="fridge heater switch">{fridge_heater_state}</b></p>
     <hr/>
-    <p>Environment Temperature: <b id="environment temperature"></b> <b>{temperature_unit}</b></p>
+    <p>Environment Temperature: <b id="environment temperature">~{environment_temperature}</b> <b>{temperature_unit}</b></p>
     <hr/>
 """.format(project_name=project_name,
-           temperature=KETTLE_TEMPERATURE.get(), temperature_unit=KETTLE_TEMPERATURE.unit,
+           kettle_temperature=KETTLE.temperature.get(),
+           fridge_temperature=FRIDGE.temperature.get(),
+           environment_temperature=ENVIRONMENT_TEMPERATURE.get(), temperature_unit=KETTLE_TEMPERATURE.unit,
            heater_state=('ON' if HEATER.state else 'OFF'),
            fridge_state=('ON' if FRIDGE.cooler.state else 'OFF'),
            fridge_heater_state=('ON' if FRIDGE.heater.state else 'OFF'))
 
     log_msg = list()
     req.parse_qs()
-    if logging._level <= logging.DEBUG:
+    if logging.getLogger().isEnabledFor(logging.DEBUG):
         for attr in dir(req):
             if not attr.startswith('_'):
                 member = getattr(req, attr)
@@ -286,7 +304,9 @@ def get_html_footer(current_page):
         pagerefs.append('<a href="/">Automatic control</a>')
     if current_page != '/manual':
         pagerefs.append('<a href="/manual">Manual control</a>')
-    if len(pagerefs) == 1:
+    if current_page != '/log':
+        pagerefs.append('<a href="/log">logging</a>')
+    if len(pagerefs) == 2:
         pagerefs.append('<a href="%s">Refresh</a>' % current_page)
         pagerefs.append('<small>uptime: %d</small>' % (time.time() - START_TIME))
     else:
@@ -295,8 +315,9 @@ def get_html_footer(current_page):
     <hr/>
     <p id="log"></p>
     <p>%s</p>
+    <p>%s</p>
   </body>
-</html>""" % ' | '.join(pagerefs)
+</html>""" % (' | '.join(pagerefs), '<br/>'.join(['%d: %s %s %s' % (item) for item in state.get_info()]))
 
 
 async def sse_response(resp, events):
@@ -318,6 +339,10 @@ async def sse_events(_req, resp):
 async def _push_data(sinks, data):
     """Background service."""
     to_del = set()
+
+    if not sinks:
+        await asyncio.sleep(0.001)
+        return
 
     for resp in sinks:
         try:
@@ -427,6 +452,18 @@ def manual(req, resp):
     yield from resp.awrite(get_html_footer('/manual'))
 
 
+def log(req, resp):
+    """Manual control web page."""
+    yield from resp.awrite(get_html_header(req, resp, PROJECT_NAME))
+
+    yield from resp.awrite('''\
+<h2>Logging</h2>
+<p>%s</p>
+''' % '<br/>'.join(status.logging.get()))
+
+    yield from resp.awrite(get_html_footer('/log'))
+
+
 def main():
     """Main routine.
 
@@ -436,6 +473,7 @@ def main():
     routes = [
         ("/", index),
         ('/manual', manual),
+        ('/log', log),
         ("/sse_events", sse_events),
     ]
 
