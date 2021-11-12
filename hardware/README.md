@@ -50,24 +50,6 @@ Add a resistor of 150 KΩ in series.
 
 The temperature around 16 °C results in a linear ADC input. Which is excellent to measure the fridge temperature.
 
-### RaspberryPi running DietPi
-
-[Download the DietPi image](https://dietpi.com/) and install on the RaspberryPi.
-
-Use a RaspberryPi to show the logging of the ESP on a display.
-
-set `CONFIG_SERIAL_CONSOLE_ENABLE=1` in `/boot/dietpi.txt` to enable serial communication with the ESP
-
-Find the serial tty, list its settings and open a session:
-
-```sh
-dmesg | grep tty
-stty -f /dev/ttyUSB0
-screen /dev/ttyUSB0 115200,sc8
-```
-
-To exit a screen session: Press ctrl-A,k
-
 ## Check this
 
 Bunch of interesting links: <http://awesome-micropython.com/>

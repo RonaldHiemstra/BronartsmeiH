@@ -2,9 +2,10 @@
 
 Hardware and software development for BronartsmeiH brewery
 
-## Initial version
+## Versions
 
-Used to brew my first self composed beer: Brönald #3 - Lockdown
+Brönald#3 - Lockdown
+Brönald#4 - Vier De Bier
 
 ## Development environment
 
@@ -16,7 +17,7 @@ Configure [Visual Studio code](devenv.md) for development.
 
 ## Kettle Control
 
-Current functionality:
+### Current functionality
 
 * webserver
   * Show current time
@@ -29,10 +30,15 @@ Current functionality:
 * fridge control thread
   * control fridge (cooling and heating) (check measured temperature against target temperature)
 
-Future functionality:
+### Future functionality
 
+* Publish data to MQTT server
 * webserver
   * Configure and select recipes
-  * Reenable: Calibrate the measured temperature (on the fly)
+  * Calibrate the measured temperature (on the fly)
 * control threads
   * log measured temperature to MQTT server
+
+Interesting features to implement:
+
+* [Dynamically create a HTML element, if a new unknown entity is pushed](https://www.javascripttutorial.net/javascript-dom/javascript-createelement/)
