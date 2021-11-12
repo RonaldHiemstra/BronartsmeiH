@@ -1,7 +1,7 @@
 @echo off
 if not "%1"=="" set BRONARTSMEIH_IP=%1
 if not defined BRONARTSMEIH_IP (
-  echo Specify brewery IP-address as argument to this script, or define env:BRONARTSMEIH_IP
+  echo Specify brewery IP-address or COM port as argument to this script, or define env:BRONARTSMEIH_IP
   pause
   exit /b 1
 )
@@ -11,7 +11,7 @@ if not exist webrepl_cfg.py (
   echo Trying to download it from the controller...
   set /P webrepl_pw=Enter webrepl password:
   pushd %~dp0
-  @python ../github/webrepl/webrepl_cli.py -p %webrepl_pw% %BRONARTSMEIH_IP%:webrepl_cfg.py webrepl_cfg.py >nul
+  call :DOWNLOAD_FILE %webrepl_pw% webrepl_cfg.py
   popd
 )
 
@@ -67,8 +67,14 @@ rem WORKAROUND: webrepl_cli.py does not support : in source and target...
 rem Convert the absolute filepath including drive-letter to a absolute filepath without drive-letter
 set _LOCAL_FILE=%~2
 set _LOCAL_FILE=%_LOCAL_FILE:~2%
-echo [92m%cd%^>python "%~dp0../github/webrepl/webrepl_cli.py" -p ^<password^> "%_LOCAL_FILE%" %BRONARTSMEIH_IP%:%3/%~nx2[0m
-@python "%~dp0../github/webrepl/webrepl_cli.py" -p %1 "%_LOCAL_FILE%" %BRONARTSMEIH_IP%:%3/%~nx2 >nul
+if (%BRONARTSMEIH_IP:~0,3%)==COM (
+  pushd %~dp2
+  mpfshell -n -c "open %BRONARTSMEIH_IP%; put %3/%~nx2"
+  popd
+) else (
+  echo [92m%cd%^>python "%~dp0../github/webrepl/webrepl_cli.py" -p ^<password^> "%_LOCAL_FILE%" %BRONARTSMEIH_IP%:%3/%~nx2[0m
+  @python "%~dp0../github/webrepl/webrepl_cli.py" -p %1 "%_LOCAL_FILE%" %BRONARTSMEIH_IP%:%3/%~nx2 >nul
+)
 if errorlevel 1 (
   echo [91mOeps... something went wrong[0m
   if not "%3"=="" (
@@ -78,6 +84,31 @@ if errorlevel 1 (
   )
   pause
 ) else (
+  xcopy /y "%2" "%~dp0\uploaded\%BRONARTSMEIH_IP%\%3\" >nul
+)
+exit /b
+
+:DOWNLOAD_FILE
+rem password: ^%1
+rem filepath: %2
+rem target folder: %3 [optional]
+rem WORKAROUND: webrepl_cli.py does not support : in source and target...
+rem Convert the absolute filepath including drive-letter to a absolute filepath without drive-letter
+set _LOCAL_FILE=%~2
+set _LOCAL_FILE=%_LOCAL_FILE:~2%
+if (%BRONARTSMEIH_IP:~0,3%)==COM (
+  pushd %~dp2
+  mpfshell -n -c "open %BRONARTSMEIH_IP%; get %3/%~nx2"
+  popd
+) else (
+  echo [92m%cd%^>python "%~dp0../github/webrepl/webrepl_cli.py" -p ^<password^> %BRONARTSMEIH_IP%:%3/%~nx2 "%_LOCAL_FILE%"[0m
+  @python "%~dp0../github/webrepl/webrepl_cli.py" -p %1 %BRONARTSMEIH_IP%:%3/%~nx2 "%_LOCAL_FILE%" >nul
+)
+if errorlevel 1 (
+  echo [91mOeps... something went wrong[0m
+  pause
+) else (
+  rem source and target are in sync now; update the uploaded folder
   xcopy /y "%2" "%~dp0\uploaded\%BRONARTSMEIH_IP%\%3\" >nul
 )
 exit /b
