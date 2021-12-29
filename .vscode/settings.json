@@ -1,5 +1,5 @@
 {
-  "python.pythonPath": "${env.HOME}\\.conda\\envs\\mpydev\\python.exe",
+  "python.defaultInterpreterPath": "${env.HOME}\\.conda\\envs\\mpydev\\python.exe",
   "python.languageServer": "Pylance",
   "python.linting.enabled": true,
   "python.linting.pylintEnabled": true,
@@ -7,8 +7,8 @@
   "python.analysis.extraPaths": [
     "./src/lib",
     "../github/micropython-stubs/stubs/cpython_core",
-    "../github/micropython-stubs/stubs/micropython-1_13-frozen/esp32/GENERIC",
-    "../github/micropython-stubs/stubs/micropython-esp32-1_13-103",
+    "../github/micropython-stubs/stubs/micropython-1_17-frozen/esp32/GENERIC",
+    "../github/micropython-stubs/stubs/micropython-esp32-1_17",
     "../github/ads1x15",
     "../picoweb"
   ],
@@ -51,8 +51,12 @@
     "ujson",
     "webrepl"
   ],
-  "python.linting.pycodestyleArgs": ["--max-line-length=132"],
-  "python.formatting.autopep8Args": ["--max-line-length=132"],
+  "python.linting.pycodestyleArgs": [
+    "--max-line-length=132"
+  ],
+  "python.formatting.autopep8Args": [
+    "--max-line-length=132"
+  ],
   "editor.rulers": [
     132
   ],

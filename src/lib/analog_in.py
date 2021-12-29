@@ -1,8 +1,8 @@
 """File providing support to read and calibrate analog input measurements."""
 import logging
 
-from machine import ADC, Pin, I2C
-import ads1x15
+from machine import ADC, Pin, SoftI2C as I2C
+from ads1x15 import ads1x15
 
 LOG = logging.getLogger('analog_in')
 LOG.setLevel(logging.INFO)

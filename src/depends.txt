@@ -1,0 +1,23 @@
+# Files to be uploaded to the target device.
+#
+# Format to upload a file to the target device:
+# <file> <destination_folder>
+#
+# Referencing another lst file containing files to upload:
+# <file>
+#../../micropython/boot/depends.txt
+boot.py .
+hardware_config.json .
+main.py .
+recovery_boot.py .
+system_config.json .
+lib/*.py .
+../../picoweb/picoweb/*.py picoweb
+../../github/ads1x15/*.py ads1x15
+
+#../lib/config.py .
+#../../github/micropython-async/v3/primitives/aadc.py primitives
+#../../github/micropython-mqtt/mqtt_as/config.py  mqtt_as
+# fixed connect by adding a retry... (test this, don't know how to reproduce :( )
+#../../github/micropython-mqtt/mqtt_as/mqtt_as.py mqtt_as
+#mqtt_as/mqtt_as.py mqtt_as
