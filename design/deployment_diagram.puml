@@ -1,0 +1,44 @@
+@startuml deployment_diagram
+file fridgeTemperatureCalibration as "Fridge\nTemperature\nCalibration"
+artifact FridgeRecipe as "Fridge\nRecipe"
+entity FridgeTemperatureSensor as "Fridge\nTemperature\nSensor"
+
+node ADS1115 <<processor>>
+
+entity KettleTemperatureSensor as "Kettle\nTemperature\nSensor"
+artifact KettleRecipe as "Kettle\nRecipe"
+file kettleTemperatureCalibration as "Kettle\nTemperature\nCalibration"
+
+entity Button
+entity EnvirontmentSensor as "Environment\nSensor"
+
+node ESP32 <<processor>>
+
+database logging as "logging and\nstatus"
+
+entity FridgeHeater as "Fridge\nHeater"
+entity Fridge
+entity KettleHeater as "Kettle\nHeater"
+
+cloud MQTT as "MQTT server"
+cloud WWW as "Web server"
+
+FridgeTemperatureSensor --o ADS1115
+KettleTemperatureSensor --o ADS1115
+
+kettleTemperatureCalibration --o ESP32
+fridgeTemperatureCalibration --o ESP32
+FridgeRecipe --o ESP32
+KettleRecipe --o ESP32
+Button --o ESP32
+ADS1115 --o ESP32
+EnvirontmentSensor --o ESP32
+
+ESP32 o-- MQTT
+ESP32 o-- WWW
+ESP32 o-- logging
+
+ESP32 o-- KettleHeater
+ESP32 o-- FridgeHeater
+ESP32 o-- Fridge
+@enduml

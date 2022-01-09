@@ -1,0 +1,48 @@
+@startuml BronartsmeiH
+artifact recipe
+
+control Time
+
+entity button
+control ButtonHandler
+button --o ButtonHandler
+
+component RecipeHandler
+recipe --o RecipeHandler : KettleRecipe\nFridgeRecipe
+Time --o RecipeHandler
+ButtonHandler --o RecipeHandler
+
+entity TemperatureSensor
+control AnalogInputs
+TemperatureSensor --o AnalogInputs : KettleTemperature\nFridgeTemperature
+
+file calibration
+
+component Temperature
+AnalogInputs --o Temperature
+calibration --o Temperature
+
+component TemperatureController
+entity PowerSwitch
+Temperature --o TemperatureController
+TemperatureController o-- PowerSwitch : KettleHeater
+TemperatureController o-- PowerSwitch : FridgeHeater
+TemperatureController o-- PowerSwitch : Fridge
+
+RecipeHandler o-- TemperatureController : TargetKettleTemperature
+RecipeHandler o-- TemperatureController : TargetFridgeTemperature
+
+entity EnvirontmentSensor
+
+package status {
+  cloud Status
+  cloud MQTT
+  cloud WWW
+}
+
+
+Temperature --o status
+RecipeHandler --o status
+TemperatureController --o status
+EnvirontmentSensor --o status
+@enduml
