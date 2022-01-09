@@ -7,16 +7,17 @@ import json
 import logging
 import time
 
-from machine import Pin
 import uasyncio as asyncio
 import picoweb
 
 from config import Config
+from kettle import KettleControl
 from localtime import Localtime
 from recipe import Recipe, Stage
 import status
 from status import state
-from temperature import temperature as Temperature
+from switch import PowerSwitch
+from temperature import temperature as TemperatureSensor
 
 logging.basicConfig(level=logging.INFO, stream=status.logging)
 gc.collect()
@@ -42,7 +43,7 @@ LOCAL_TIME = Localtime(SYSTEM_CONFIG.get('utc_offset'))
 START_TIME = time.time()
 
 
-ENVIRONMENT_TEMPERATURE = Temperature('environment temperature', HARDWARE_CONFIG, push_event)
+ENVIRONMENT_TEMPERATURE = TemperatureSensor('environment temperature', HARDWARE_CONFIG, push_event)
 
 # duration, target temperature, start time (temperature reached)
 RECIPE = Recipe([Stage('Preheat', 0, 65, 'Add malt and cooked oats'),
@@ -56,89 +57,20 @@ RECIPE = Recipe([Stage('Preheat', 0, 65, 'Add malt and cooked oats'),
                  Stage('Cooling', 0, 20, 'Transfer wort to fermentation vessel and add yeast', False)])
 
 
-class PowerSwitch():
-    """Control the heater of the kettle."""
-
-    def __init__(self, device_name, pin=13):
-        self.device_name = device_name
-        self.pin = Pin(pin, Pin.OUT)
-        self.state = None
-
-    def turn_on(self):
-        """Turn the heater on."""
-        if self.state is not 1:
-            self.state = 1
-            self.pin.value(self.state)
-            state.set_info(self.device_name, 'ON')
-
-    def turn_off(self):
-        """Turn the heater off."""
-        if self.state is not 0:
-            self.state = 0
-            self.pin.value(self.state)
-            state.set_info(self.device_name, 'OFF')
-
-
 HEATER = PowerSwitch('kettle switch', int(HARDWARE_CONFIG.get('kettle switch')))
-KETTLE_TEMPERATURE = Temperature('kettle temperature', hardware_config=HARDWARE_CONFIG, callback=push_event)
+KETTLE_TEMPERATURE = TemperatureSensor('kettle temperature', hardware_config=HARDWARE_CONFIG, callback=push_event)
 
 TARGET_TEMPERATURE = RECIPE.stages[0].temperature
 state.set_info('Target temperature', TARGET_TEMPERATURE)
 
 
-class Kettle():
-    """Control the brewing kettle."""
-
-    def __init__(self, temperature: Temperature, heater: PowerSwitch, recipe, interval=0.5, callback=None):
-        """Constructor.
-        params:
-            temperature   Temperature measurement device.
-            heater        Heater switch.
-            recipe        Brewing recipe.
-            interval      Frequency to check recipe and temperature every [s].
-        """
-        self.temperature = temperature
-        self.heater = heater
-        self.recipe = recipe
-        self.interval = interval
-        self.callback = callback
-        self.manual_control = False
-        self.manual_target_temperature = None
-        loop = asyncio.get_event_loop()
-        loop.create_task(self._control())
-
-    async def _control(self):
-        """Control the temperature of the brewing kettle."""
-        while True:
-            temperature = self.temperature.get()
-
-            # DEBUG: using full automation...
-            if self.manual_control:
-                target_temperature = self.manual_target_temperature
-            else:
-                target_temperature = self.recipe.get_target_temperature(temperature)
-
-            if target_temperature is not None:
-                if temperature < target_temperature:
-                    if not self.heater.state:
-                        self.heater.turn_on()
-                        if self.callback:
-                            await self.callback(**{self.heater.device_name: 'ON'})
-                elif temperature > target_temperature:
-                    if self.heater.state:
-                        self.heater.turn_off()
-                        if self.callback:
-                            await self.callback(**{self.heater.device_name: 'OFF'})
-            await asyncio.sleep(self.interval)
-
-
-KETTLE = Kettle(KETTLE_TEMPERATURE, HEATER, RECIPE, callback=push_event)
+KETTLE = KettleControl(KETTLE_TEMPERATURE, HEATER, RECIPE, callback=push_event)
 
 
 class Fridge():
     """Control the brewing fridge."""
 
-    def __init__(self, temperature: Temperature, heater: PowerSwitch, cooler: PowerSwitch, interval=10, callback=None):
+    def __init__(self, temperature: TemperatureSensor, heater: PowerSwitch, cooler: PowerSwitch, interval=10, callback=None):
         """Constructor.
         params:
             temperature   Temperature measurement device.
@@ -188,7 +120,7 @@ class Fridge():
             await asyncio.sleep(interval)
 
 
-FRIDGE_TEMPERATURE = Temperature('fridge temperature', hardware_config=HARDWARE_CONFIG, callback=push_event)
+FRIDGE_TEMPERATURE = TemperatureSensor('fridge temperature', hardware_config=HARDWARE_CONFIG, callback=push_event)
 FRIDGE_HEATER = PowerSwitch('fridge heater switch', int(HARDWARE_CONFIG.get('fridge heater switch')))
 FRIDGE_COOLER = PowerSwitch('fridge switch', int(HARDWARE_CONFIG.get('fridge switch')))
 FRIDGE = Fridge(FRIDGE_TEMPERATURE, FRIDGE_HEATER, FRIDGE_COOLER, callback=push_event)
@@ -336,26 +268,30 @@ async def sse_events(_req, resp):
     return False
 
 
+push_data_lock = asyncio.Lock()
+
+
 async def _push_data(sinks, data):
     """Background service."""
     to_del = set()
 
-    if not sinks:
-        await asyncio.sleep(0.001)
-        return
+    async with push_data_lock:
+        if not sinks:
+            await asyncio.sleep(0.001)
+            return
 
-    for resp in sinks:
-        try:
-            await resp.awrite("data: %s\n\n" % data)
-        except OSError as ex:
-            print("Event source %r disconnected (%r)" % (resp, ex))
-            await resp.aclose()
-            # Can't remove item from set while iterating, have to have
-            # second pass for that (not very efficient).
-            to_del.add(resp)
+        for resp in sinks:
+            try:
+                await resp.awrite("data: %s\n\n" % data)
+            except OSError as ex:
+                print("Event source %r disconnected (%r)" % (resp, ex))
+                await resp.aclose()
+                # Can't remove item from set while iterating, have to have
+                # second pass for that (not very efficient).
+                to_del.add(resp)
 
-    for resp in to_del:
-        sinks.remove(resp)
+        for resp in to_del:
+            sinks.remove(resp)
 
 
 def set_value(obj, key, value, log_msg):
