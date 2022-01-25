@@ -1,12 +1,17 @@
+"""Module controlling the temperature of the kettle.
+
+TODO: rename this to temperature_control... This module could also be used for controlling the temperature of the fridge!
+"""
+from recipe import Recipe
 import uasyncio as asyncio
 from switch import PowerSwitch
-from temperature import temperature as TemperatureSensor
+from temperature import TemperatureBase
 
 
 class KettleControl():
     """Control the brewing kettle."""
 
-    def __init__(self, temperature: TemperatureSensor, heater: PowerSwitch, recipe, interval=0.5, callback=None):
+    def __init__(self, temperature: TemperatureBase, heater: PowerSwitch, recipe: Recipe, interval=0.5):
         """Constructor.
         params:
             temperature   Temperature measurement device.
@@ -18,13 +23,10 @@ class KettleControl():
         self.heater = heater
         self.recipe = recipe
         self.interval = interval
-        self.callback = callback
         self.manual_control = False
         self.manual_target_temperature = None
-        loop = asyncio.get_event_loop()
-        loop.create_task(self._control())
 
-    async def _control(self):
+    async def run(self):
         """Control the temperature of the brewing kettle."""
         while True:
             temperature = self.temperature.get()
@@ -39,11 +41,7 @@ class KettleControl():
                 if temperature < target_temperature:
                     if not self.heater.state:
                         self.heater.turn_on()
-                        if self.callback:
-                            await self.callback(**{self.heater.device_name: 'ON'})
                 elif temperature > target_temperature:
                     if self.heater.state:
                         self.heater.turn_off()
-                        if self.callback:
-                            await self.callback(**{self.heater.device_name: 'OFF'})
             await asyncio.sleep(self.interval)

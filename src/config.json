@@ -1,0 +1,55 @@
+{
+  "project_name": "BronartsmeiH",
+  "mqtt": {
+    "base_topic": "brewery",
+    "server_ip": "192.168.1.1"
+  },
+  "hardware": {
+    "_spare.input": "34",
+    "button.acknowledge": "35",
+    "led.red": "25",
+    "led.green": "26",
+    "fridge heater switch": "14",
+    "fridge switch": "12",
+    "kettle switch": "13",
+    "environment temperature": {
+      "device": "DHT22",
+      "pin": "ESP.27"
+    },
+    "environment humidity": {
+      "device": "DHT22",
+      "pin": "ESP.27"
+    },
+    "ADS1115_0": {
+      "device": "ADS1115",
+      "SDA": "ESP.32",
+      "SCL": "ESP.33",
+      "u_ref.pin": "3",
+      "u_ref.gain": "2"
+    },
+    "fridge temperature": {
+      "device": "NTC",
+      "pin": "ADS1115_0.0",
+      "r_ref": "150000",
+      "probe": "NTC_Hothap"
+    },
+    "kettle temperature": {
+      "device": "NTC",
+      "pin": "ADS1115_0.1",
+      "r_ref": "27000",
+      "probe": "NTC_Hothap"
+    },
+    "_spare.analog_in": {
+      "device": "ADS1115",
+      "pin": "ADS1115_0.2"
+    },
+    "NTC_Hothap": {
+      "r25": "102500",
+      "b_value": "4000"
+    },
+    "NTC_Ikea": {
+      "r25": "220000",
+      "b_value": "4225"
+    }
+  }
+}

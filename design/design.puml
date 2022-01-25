@@ -36,8 +36,8 @@ entity EnvirontmentSensor
 
 package status {
   cloud Status
-  cloud MQTT
-  cloud WWW
+  cloud MQTT as "MQTTServer"
+  cloud WWW as "WebServer"
 }
 
 

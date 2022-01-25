@@ -3,6 +3,10 @@
 The method state.update() should be called at a regular base, to make sure LEDs will blink.
 """
 import time
+try:
+    from typing import Optional
+except ImportError:
+    ...
 from machine import Pin, RTC
 from config import Config
 import uasyncio as asyncio
@@ -100,7 +104,7 @@ class _Status:
             info.append((1, value[0], key, value[1]))
         return sorted(info)
 
-    def alert(self, key: str, message: str):
+    def alert(self, key: str, message: Optional[str]):
         """Store and allert a message.
 
         @param key      Message source.
@@ -121,7 +125,7 @@ class Status2Leds(_Status):
     """Test status, using single color LEDS, connected to the EPS digital output."""
 
     def __init__(self, red: str, green: str):
-        io_connections = Config('hardware_config.json')
+        io_connections = Config('config.json').get('hardware')
         self.red = Pin(int(io_connections.get(red)), Pin.OUT)
         self.green = Pin(int(io_connections.get(green)), Pin.OUT)
         self.red.value(0)

@@ -1,4 +1,8 @@
 """A recipe contains several stages."""
+try:
+    from typing import Callable, List, Optional  # to please lint...
+except ImportError:
+    ...
 import logging
 import time
 
@@ -8,14 +12,14 @@ from status import state
 class Stage():
     """A stage in the brewing process."""
 
-    def __init__(self, name, duration, temperature, action=None, wait_for_action=True):
+    def __init__(self, name: str, duration: float, temperature: float, action=None, wait_for_action=True):
         self.name = name
         self.duration = duration
         self.temperature = temperature
-        self.start = None
+        self.start: Optional[float] = None
         self.wait_for_action = wait_for_action if action else False
         self.end_message = action
-        self.end = None
+        self.end: Optional[float] = None
 
 
 class Recipe():
@@ -24,10 +28,13 @@ class Recipe():
     #TODO: the recipe should get the temperature when needed (using asyncio)...
     """
 
-    def __init__(self, stages):
+    def __init__(self, name: str, stages: List[Stage], callback: Callable[..., None]):
+        self.name = name
         self.stages = stages
+        self.callback = callback
         self.index = 0
         self.edge = None  # -1 for raising edge; 1 for falling edge
+        self.callback(**{'target temperature': self.stages[self.index].temperature})
 
     def _set_current_temperature(self, cur_temperature):
         target_temperature = self._get_target_temperature()
@@ -37,12 +44,12 @@ class Recipe():
                 self.edge = -1 if cur_temperature < target_temperature else 1
             delta = target_temperature - cur_temperature
             if delta * self.edge >= 0:
-                logging.info('start stage %d: target=%.1f, current=%.1f, edge=%d',
-                             self.index, target_temperature, cur_temperature, self.edge)
+                self.callback(info='start stage %d: target=%.1f, current=%.1f, edge=%d' %
+                              (self.index, target_temperature, cur_temperature, self.edge))
                 stage.start = time.time()
                 self.edge = None
 
-    def get_target_temperature(self, cur_temperature=None, default=-273):
+    def get_target_temperature(self, cur_temperature=None, default: float=-273):
         """Get the required temperature."""
         if cur_temperature is not None:
             self._set_current_temperature(cur_temperature)
@@ -52,6 +59,7 @@ class Recipe():
         stage = self.stages[self.index]
         if (stage.start is not None) and (time.time() - stage.start) > stage.duration:
             if stage.wait_for_action and stage.end is None:
+                self.callback(recipe=stage.end_message)
                 state.alert('Recipe', stage.end_message)
             else:
                 if stage.end is None:
@@ -59,14 +67,25 @@ class Recipe():
                 if self.index == (len(self.stages) - 1):
                     return default
                 self.index += 1
+                self.callback(**{'target temperature': self.stages[self.index].temperature})
 
         return self.stages[self.index].temperature
+
+    def set_target_temperature(self, temperature):
+        self.stages[self.index].temperature = float(temperature)
+        self.callback(**{'target temperature': self.stages[self.index].temperature})
+
+    def set_stage(self, index):
+        index = int(index)
+        assert index < len(self.stages), 'index out of range'
+        self.callback(recipe=self.stages[self.index].name)
 
     def ack_action(self, action):
         """Acknowledge the pending action."""
         stage = self.stages[self.index]
         if stage.end_message == action:
             stage.end = time.time()
+            self.callback(recipe=stage.name)
             state.alert('Recipe', None)
         else:
             logging.error('Action "%s" not allowed!, wrong stage[%d] expecting "%s"', action, self.index, stage.end_message)

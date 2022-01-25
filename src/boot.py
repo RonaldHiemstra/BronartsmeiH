@@ -18,7 +18,7 @@ except ImportError:
 esp.osdebug(None)
 gc.collect()
 
-system_config = Config('system_config.json')
+network_config = Config('network_config.json')
 
 
 def connect_wifi(essid, password, accesspoints, timeout=60):
@@ -29,7 +29,7 @@ def connect_wifi(essid, password, accesspoints, timeout=60):
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
 
-    project_name = system_config.get('project_name')
+    project_name = network_config.get('project_name')
     if project_name is not None:
         wlan.config(dhcp_hostname=project_name)
 
@@ -70,7 +70,7 @@ def start_ap():
 
 detected_accesspoints = set()
 
-if not connect_wifi(system_config.get('ssid'), system_config.get('__password'), accesspoints=detected_accesspoints):
+if not connect_wifi(network_config.get('ssid'), network_config.get('__password'), accesspoints=detected_accesspoints):
     start_ap()
 
 webrepl.start()

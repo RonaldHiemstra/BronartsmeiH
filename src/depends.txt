@@ -7,17 +7,25 @@
 # <file>
 #../../micropython/boot/depends.txt
 boot.py .
-hardware_config.json .
-main.py .
+config.json .
+network_config.json .
+recipe5.py .
 recovery_boot.py .
-system_config.json .
+# system_config.json .
 lib/*.py .
-../../picoweb/picoweb/*.py picoweb
+# ../../picoweb/picoweb/*.py picoweb
 ../../github/ads1x15/*.py ads1x15
 
 #../lib/config.py .
 #../../github/micropython-async/v3/primitives/aadc.py primitives
-#../../github/micropython-mqtt/mqtt_as/config.py  mqtt_as
+#../../github/micropython-async/v3/primitives/queue.py primitives
+
+#### mqtt_as
+../../github/micropython-mqtt/mqtt_as/config.py  mqtt_as
 # fixed connect by adding a retry... (test this, don't know how to reproduce :( )
-#../../github/micropython-mqtt/mqtt_as/mqtt_as.py mqtt_as
-#mqtt_as/mqtt_as.py mqtt_as
+# ../../github/micropython-mqtt/mqtt_as/mqtt_as.py mqtt_as
+../../micropython/ambient/mqtt_as/mqtt_as.py mqtt_as
+
+# upload main as last. If main logs to much, mpfshell cannot upload new files.
+# trick is to delete 'main.py' manually, before uploading. TODO: a workaround is required here!!!
+main.py .
