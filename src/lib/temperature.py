@@ -95,16 +95,19 @@ class Dht22(TemperatureBase):
         # DHT22 currently does not support asyncio...
         # Note:("HTU21D temperature/humidity sensor")[https://github.com/peterhinch/micropython-async/blob/master/v3/docs/HTU21D.md]
         # does support asyncio.
-        try:
-            delay_ms = time.ticks_diff(time.ticks_ms(), self._start)
-            if delay_ms < (self.interval * 1e3):
-                print(f'Additional sleep_ms({(self.interval * 1e3) - delay_ms})')
-                await asyncio.sleep_ms((self.interval * 1e3) - delay_ms)
-            self.dht.measure()
-            self._start = time.ticks_ms()
-        except OSError as ex:
-            # Even with a timeout of 3s, the OSError(E TIMEDOUT) exception is sometimes raised.
-            print(f'WARNING: {ex}, returning last known value for "{self.device_name}"')
+        for index in range(3, 0, -1):
+            try:
+                delay_ms = time.ticks_diff(time.ticks_ms(), self._start)
+                if delay_ms < (self.interval * 1e3):
+                    print(f'Additional sleep_ms({(self.interval * 1e3) - delay_ms})')
+                    await asyncio.sleep_ms((self.interval * 1e3) - delay_ms)
+                self.dht.measure()
+                self._start = time.ticks_ms()
+                break
+            except OSError as ex:
+                # Even with a timeout of 3s, the OSError(E TIMEDOUT) exception is sometimes raised.
+                if index == 1:
+                    print(f'WARNING: {ex}, returning last known value for "{self.device_name}"')
         temp = self.dht.temperature()
         return temp
 

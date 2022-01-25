@@ -1,5 +1,5 @@
 /src/recovery_boot.py
-/src/system_config.json
+/src/network_config.json
 /webrepl_cfg.py
 /uploaded
 __pycache__

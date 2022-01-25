@@ -41,16 +41,22 @@ class MQTTClient:
 
     def callback(self, topic, msg, retained):
         """Handle messages received from subscribed topics."""
-        #  (TODO: respond to requests).
-        print((topic, msg, retained))
-        requests = json.loads(msg)
-        print(requests)
-        for device, message in requests.items():
-            if device in self.callbacks:
+        def call(function, *args):
+            callback = self.callbacks.get(function)
+            if callback:
                 try:
-                    self.callbacks[device](message)
+                    callback(*args)
                 except Exception as ex:
                     print(f'ERROR: MQTT({topic}, {msg}, {retained}): {ex}')
+            else:
+                print(f'WARNING: MQTT: {function} not in {self.callbacks.keys()}')
+        try:
+            msg = json.loads(msg)
+        except ValueError:
+            call(msg.decode())
+        else:
+            for function, args in msg.items():
+                call(function, args)
 
     async def conn_han(self, client: mqtt_as.MQTTClient):
         """Subscribe to config change requests."""
@@ -84,9 +90,9 @@ class MQTTClient:
         """Add a new sensor."""
         assert self.topics.get(
             sensor_name + '_home') is None, f'{sensor_name} is already present. Sensor names in Home Assistant should be unique!'
-        if callback is not None:
-            self.callbacks[sensor_name] = callback
         sensor_id = sensor_name.replace(' ', '_')
+        if callback is not None:
+            self.callbacks[sensor_id] = callback
         state_topic = f'{self.base_topic}/{sensor_id}'
         msg_info = dict(name=f'{sensor_name}',
                         unique_id=f'{self.unique_id}_{sensor_id}',

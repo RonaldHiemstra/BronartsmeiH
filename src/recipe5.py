@@ -18,18 +18,3 @@ def get_recipe(callback: Callable[..., None]) -> Recipe:
                    Stage('Boil phase3', 10 * 60, 100, 'Whirlpool and start cooling'),
                    Stage('Cooling', 0, 20, 'Transfer wort to fermentation vessel and add yeast', False)],
                   callback)
-
-
-def get_recipe(callback: Callable[..., None]) -> Recipe:
-    return Recipe('Brönald #5 - Abraham',
-                  # stage name, duration [s], target temperature [°C], (manual action to perform at end of stage)
-                  [Stage('Preheat', 0, 22, 'Add malt and cooked oats'),
-                   Stage('Maichen phase1', 1, 24),
-                   Stage('Maichen phase2', 1, 25),
-                   Stage('Maichen phase3', 1, 26),
-                   Stage('Maichen phase4', 1, 24, 'Filter/remove grains'),
-                   Stage('Boil phase1', 1, 25, 'Add first hops'),
-                   Stage('Boil phase2', 1, 26, 'Add rest of hops and sugar'),
-                   Stage('Boil phase3', 1, 27, 'Whirlpool and start cooling'),
-                   Stage('Cooling', 0, 22, 'Transfer wort to fermentation vessel and add yeast', False)],
-                  callback)

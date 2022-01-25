@@ -44,7 +44,7 @@ class Recipe():
                 self.edge = -1 if cur_temperature < target_temperature else 1
             delta = target_temperature - cur_temperature
             if delta * self.edge >= 0:
-                self.callback(info='start stage %d: target=%.1f, current=%.1f, edge=%d' %
+                self.callback(recipe_info='start stage %d: target=%.1f, current=%.1f, edge=%d' %
                               (self.index, target_temperature, cur_temperature, self.edge))
                 stage.start = time.time()
                 self.edge = None
@@ -57,17 +57,23 @@ class Recipe():
 
     def _get_target_temperature(self, default=-273):
         stage = self.stages[self.index]
-        if (stage.start is not None) and (time.time() - stage.start) > stage.duration:
-            if stage.wait_for_action and stage.end is None:
-                self.callback(recipe=stage.end_message)
-                state.alert('Recipe', stage.end_message)
+        if stage.start is None:
+            self.callback(recipe=f'{self.stages[self.index].name}: Waiting to start')
+        else:
+            pending_duration = stage.duration - (time.time() - stage.start)
+            if pending_duration > 0:
+                self.callback(recipe=f'{self.stages[self.index].name}: {pending_duration:.0f}s remaining')
             else:
-                if stage.end is None:
-                    stage.end = time.time()
-                if self.index == (len(self.stages) - 1):
-                    return default
-                self.index += 1
-                self.callback(**{'target temperature': self.stages[self.index].temperature})
+                if stage.wait_for_action and stage.end is None:
+                    self.callback(recipe=f'Action: stage.end_message')
+                    state.alert('Recipe', stage.end_message)
+                else:
+                    if stage.end is None:
+                        stage.end = time.time()
+                    if self.index == (len(self.stages) - 1):
+                        return default
+                    self.index += 1
+                    self.callback(**{'target temperature': self.stages[self.index].temperature})
 
         return self.stages[self.index].temperature
 
@@ -78,17 +84,15 @@ class Recipe():
     def set_stage(self, index):
         index = int(index)
         assert index < len(self.stages), 'index out of range'
+        self.index = index
         self.callback(recipe=self.stages[self.index].name)
 
-    def ack_action(self, action):
+    def ack_action(self):
         """Acknowledge the pending action."""
         stage = self.stages[self.index]
-        if stage.end_message == action:
-            stage.end = time.time()
-            self.callback(recipe=stage.name)
-            state.alert('Recipe', None)
-        else:
-            logging.error('Action "%s" not allowed!, wrong stage[%d] expecting "%s"', action, self.index, stage.end_message)
+        stage.end = time.time()
+        self.callback(recipe=stage.name)
+        state.alert('Recipe', None)
 
     def web_page(self, recipe_variable_name):
         """Get HTML with the recipe and its progress."""
@@ -120,7 +124,7 @@ class Recipe():
                     message = stage.end_message
                     t_end = '<b>%s</b>' % t_end
                     if action:
-                        action = '<a href="/?%s.ack_action=%s">%s</a>' % (recipe_variable_name, action, action)
+                        action = '<a href="/?%s.ack_action">%s</a>' % (recipe_variable_name, action)
             else:
                 row_style = ' style="background-color:gray"'
                 t_start = '%02d:%02d' % time.localtime(stage.start)[3:5]
@@ -131,6 +135,6 @@ class Recipe():
         html += '</table></p>\n'
         if message is not None:
             html += '<p style="color:red"><b>%s</b></p>\n' % message
-            html += '<p><a href="/?%s.ack_action=%s"><button class="button button_on">action performed</button></a></p>\n' % (
-                recipe_variable_name, message)
+            html += '<p><a href="/?%s.ack_action"><button class="button button_on">action performed</button></a></p>\n' % (
+                recipe_variable_name)
         return html
