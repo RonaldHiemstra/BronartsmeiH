@@ -60,12 +60,13 @@ class Recipe():
         if stage.start is None:
             self.callback(recipe=f'{self.stages[self.index].name}: Waiting to start')
         else:
-            pending_duration = stage.duration - (time.time() - stage.start)
+            pending_duration = int(stage.duration - (time.time() - stage.start))
             if pending_duration > 0:
-                self.callback(recipe=f'{self.stages[self.index].name}: {pending_duration:.0f}s remaining')
+                self.callback(
+                    recipe=f'{self.stages[self.index].name}: {pending_duration // 60}:{pending_duration % 60:02} remaining')
             else:
                 if stage.wait_for_action and stage.end is None:
-                    self.callback(recipe=f'Action: stage.end_message')
+                    self.callback(recipe=f'Action: {stage.end_message}')
                     state.alert('Recipe', stage.end_message)
                 else:
                     if stage.end is None:
